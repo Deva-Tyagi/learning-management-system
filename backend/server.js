@@ -92,6 +92,11 @@ app.use('/api/live-classes', require('./routes/liveClassRoutes'));
 app.use('/api/batches', require('./routes/batchRoutes'));
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
 
+// Root check route
+app.get('/', (req, res) => {
+  res.send('Backend is running');
+});
+
 // Health check route
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running', timestamp: new Date().toISOString() });
