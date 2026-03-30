@@ -9,7 +9,7 @@ const {
   deleteIdCard,
   downloadIdCardPdf,
   getStudentIdCards
-} = require('../controllers/IdCardController');
+} = require('../controllers/idCardController');
 
 // Issue new ID Card
 router.post('/issue', auth, issueIdCard);
