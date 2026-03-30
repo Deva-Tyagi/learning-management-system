@@ -7,7 +7,8 @@ const jwt = require("jsonwebtoken");
 
 // ✅ Register SuperAdmin (Postman only)
 exports.registerSuperAdmin = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email: rawEmail, password } = req.body;
+  const email = (rawEmail || '').toLowerCase().trim();
   try {
     let superAdmin = await SuperAdmin.findOne({ email });
     if (superAdmin) return res.status(400).json({ msg: "SuperAdmin already exists" });
@@ -51,7 +52,8 @@ exports.getPublicSettings = async (req, res) => {
 
 // ✅ Login SuperAdmin
 exports.loginSuperAdmin = async (req, res) => {
-  const { email, password } = req.body;
+  const { email: rawEmail, password } = req.body;
+  const email = (rawEmail || '').toLowerCase().trim();
   try {
     const superAdmin = await SuperAdmin.findOne({ email });
     if (!superAdmin) return res.status(400).json({ msg: "Invalid Credentials" });
@@ -83,10 +85,10 @@ exports.getAllClients = async (req, res) => {
 };
 
 exports.createClient = async (req, res) => {
-  const { name, instituteName, field, email, mobile, password, plan, planDuration } = req.body;
+  const { name, instituteName, field, email: rawEmail, mobile, password, plan, planDuration } = req.body;
+  const email = (rawEmail || '').toLowerCase().trim();
   try {
     let client = await Admin.findOne({ email });
-    if (client) return res.status(400).json({ msg: "Institute email already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const planExpiryDate = new Date();

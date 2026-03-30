@@ -15,7 +15,8 @@ const Payment = require("../models/Payment");
 
 // ✅ Register Admin
 exports.registerAdmin = async (req, res) => {
-  const { name, instituteName, field, email, mobile, password } = req.body;
+  const { name, instituteName, field, email: rawEmail, mobile, password } = req.body;
+  const email = (rawEmail || '').toLowerCase().trim();
   try {
     let admin = await Admin.findOne({ email });
     if (admin) return res.status(400).json({ msg: "Admin already exists" });
@@ -41,7 +42,8 @@ exports.registerAdmin = async (req, res) => {
 
 // ✅ Login Admin
 exports.loginAdmin = async (req, res) => {
-  const { email, password } = req.body;
+  const { email: rawEmail, password } = req.body;
+  const email = (rawEmail || '').toLowerCase().trim();
   try {
     const admin = await Admin.findOne({ email });
     if (!admin) return res.status(400).json({ msg: "Invalid Credentials" });
@@ -63,7 +65,8 @@ exports.loginAdmin = async (req, res) => {
 
 // ✅ OTP Logic for Password Update
 exports.requestOtp = async (req, res) => {
-  const { email } = req.body;
+  const { email: rawEmail } = req.body;
+  const email = (rawEmail || '').toLowerCase().trim();
   try {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpires = Date.now() + 600000; // 10 mins

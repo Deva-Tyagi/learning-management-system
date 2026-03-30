@@ -146,8 +146,10 @@ exports.addStudent = async (req, res) => {
       return res.status(400).json({ msg: 'Required fields are missing' });
     }
 
+    const normalizedEmail = (email || '').toLowerCase().trim();
+
     // Check if student already exists
-    const existingStudent = await Student.findOne({ email: email.toLowerCase().trim() });
+    const existingStudent = await Student.findOne({ email: normalizedEmail });
     if (existingStudent) {
       return res.status(400).json({ msg: 'Student with this email already exists' });
     }
@@ -163,7 +165,7 @@ exports.addStudent = async (req, res) => {
 
     const student = new Student({
       name: name.trim(),
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       password: studentPassword, // Hashed by pre-save hook
       phone,
       franchise: franchise || '',
