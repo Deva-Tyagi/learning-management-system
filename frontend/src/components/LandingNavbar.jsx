@@ -53,7 +53,7 @@ const LandingNavbar = () => {
             </div>
             <div className="flex flex-col">
               <span className="text-white font-bold text-lg leading-none tracking-tight">{platformName}</span>
-              <span className="text-violet-400 text-[10px] font-semibold tracking-widest uppercase leading-none">Management System</span>
+              <span className="text-violet-400 text-[10px] font-semibold tracking-widest uppercase leading-none">Learning Management System</span>
             </div>
           </Link>
 
