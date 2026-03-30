@@ -18,4 +18,11 @@ export default defineConfig({
       ],
     },
   },
+  build: {
+    minify: 'esbuild',
+    chunkSizeWarningLimit: 1600,
+  },
+  esbuild: {
+    drop: ['console', 'debugger'],
+  },
 })
