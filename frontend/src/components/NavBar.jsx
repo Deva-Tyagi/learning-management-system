@@ -5,7 +5,7 @@ import { usePlatform } from "../context/PlatformContext";
 
 // keep optional fallback for public URL (debug only)
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 const Navbar = () => {
   const [isCoursesMenuOpen, setIsCoursesMenuOpen] = useState(false);
