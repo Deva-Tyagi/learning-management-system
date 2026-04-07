@@ -26,6 +26,7 @@ export default function Notes({ token }) {
   const [loading, setLoading] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [courses, setCourses] = useState([]);
+  const [batchesList, setBatchesList] = useState([]);
   const [students, setStudents] = useState([]);
   const [assignedTo, setAssignedTo] = useState("all");
   const [selectedCourse, setSelectedCourse] = useState("");
@@ -52,12 +53,14 @@ export default function Notes({ token }) {
   const fetchMetadata = async () => {
     if (!token) return;
     try {
-      const [coursesRes, studentsRes] = await Promise.all([
+      const [coursesRes, studentsRes, batchesRes] = await Promise.all([
         fetch(`${API_BASE_URL}/courses/get`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE_URL}/students/get`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE_URL}/batches`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (coursesRes.ok) setCourses(await coursesRes.json());
       if (studentsRes.ok) setStudents(await studentsRes.json());
+      if (batchesRes.ok) setBatchesList(await batchesRes.json());
     } catch {}
   };
 
@@ -207,10 +210,11 @@ export default function Notes({ token }) {
             {/* Conditional: Batch */}
             {assignedTo === "batch" && (
               <div>
-                <label style={lbl}>Enter Batch Name</label>
-                <input type="text" placeholder="e.g. Morning Batch"
-                  value={selectedBatch} onChange={e => setSelectedBatch(e.target.value)}
-                  style={inp} required />
+                <label style={lbl}>Select Batch</label>
+                <select value={selectedBatch} onChange={e => setSelectedBatch(e.target.value)} style={inp} required>
+                  <option value="">Choose Batch</option>
+                  {batchesList.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
+                </select>
               </div>
             )}
 

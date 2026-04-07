@@ -27,6 +27,15 @@ import SuperAdminDashboard from "./pages/superadmin/Dashboard";
 import StudentLogin from "./pages/student/Login";
 import StudentDashboard from "./pages/student/Dashboard";
 import TakeExam from "./pages/student/TakeExam";
+
+// White Label Pages
+import WhiteLabelLayout from "./pages/whitelabel/WhiteLabelLayout";
+import WhiteLabelHome from "./pages/whitelabel/Home";
+import WhiteLabelAbout from "./pages/whitelabel/About";
+import WhiteLabelCourses from "./pages/whitelabel/Courses";
+import CoursePage from "./pages/whitelabel/CoursePage";
+import WhiteLabelContact from "./pages/whitelabel/Contact";
+
 import "./App.css";
 import { HelmetProvider } from "react-helmet-async";
 import { PlatformProvider } from "./context/PlatformContext";
@@ -39,7 +48,8 @@ const LayoutWrapper = ({ children }) => {
   const isAdminPath = location.pathname.startsWith("/admin");
   const isStudentPath = location.pathname.startsWith("/student");
   const isSuperAdminPath = location.pathname.startsWith("/superadmin");
-  const isExcludedPath = isAdminPath || isStudentPath || isSuperAdminPath;
+  const isWhiteLabelPath = location.pathname.startsWith("/site");
+  const isExcludedPath = isAdminPath || isStudentPath || isSuperAdminPath || isWhiteLabelPath;
   const isLandingPath = landingPaths.some((p) => location.pathname === p);
 
   return (
@@ -85,6 +95,15 @@ function App() {
               <Route path="/student/login" element={<StudentLogin />} />
               <Route path="/student/dashboard" element={<StudentDashboard />} />
               <Route path="/student/exam/:id" element={<TakeExam />} />
+
+              {/* White Label Storefront Routes */}
+              <Route path="/site/:domainName" element={<WhiteLabelLayout />}>
+                <Route index element={<WhiteLabelHome />} />
+                <Route path="about" element={<WhiteLabelAbout />} />
+                <Route path="courses" element={<WhiteLabelCourses />} />
+                <Route path="courses/:courseId" element={<CoursePage />} />
+                <Route path="contact" element={<WhiteLabelContact />} />
+              </Route>
             </Routes>
           </LayoutWrapper>
         </Router>

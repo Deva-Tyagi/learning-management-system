@@ -10,7 +10,10 @@ const {
     updateClientSubscription,
     getClientStats,
     getClientActivity,
-    getPublicSettings
+    getPublicSettings,
+    submitDemoInquiry,
+    getDemoInquiries,
+    updateDemoInquiryStatus
 } = require('../controllers/superAdminController');
 const router = express.Router();
 const auth = require('../middleware/authMiddleware');
@@ -21,6 +24,7 @@ router.post('/login', loginSuperAdmin);
 
 // Public branding/settings
 router.get('/public/settings', getPublicSettings);
+router.post('/public/demo-inquiry', submitDemoInquiry);
 
 // Protected Superadmin routes
 const superAdminAuth = (req, res, next) => {
@@ -40,5 +44,9 @@ router.get('/activity', auth, superAdminAuth, getClientActivity);
 // Global settings
 router.get('/settings', auth, superAdminAuth, getGlobalSettings);
 router.put('/settings', auth, superAdminAuth, updateGlobalSettings);
+
+// Demo Inquiries
+router.get('/demo-inquiries', auth, superAdminAuth, getDemoInquiries);
+router.put('/demo-inquiries/:id', auth, superAdminAuth, updateDemoInquiryStatus);
 
 module.exports = router;

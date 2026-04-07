@@ -8,6 +8,8 @@ import {
   UserCircle,
   Building2,
   TrendingUp,
+  Globe,
+  MessageSquare,
 } from "lucide-react";
 import { usePlatform } from "../../context/PlatformContext";
 
@@ -71,6 +73,8 @@ export default function SuperAdminSidebar({
       items: [
         { key: "clients", icon: Users, label: "All Clients" },
         { key: "create-client", icon: UserPlus, label: "Add New Institute" },
+        { key: "storefronts", icon: Globe, label: "Storefronts" },
+        { key: "demo-inquiry", icon: MessageSquare, label: "Demo Inquiry" },
       ],
     },
     {

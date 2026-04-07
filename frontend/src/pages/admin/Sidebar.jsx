@@ -17,6 +17,8 @@ import {
   Video,
   Trophy,
   Clock,
+  Globe,
+  MessageSquare,
 } from "lucide-react";
 
 export default function Sidebar({
@@ -30,6 +32,7 @@ export default function Sidebar({
     exams: false,
     idCards: false,
     franchise: false,
+    engagement: false,
   });
   const { platformName, primaryColor } = usePlatform();
 
@@ -169,6 +172,49 @@ export default function Sidebar({
         <p className="px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2 mt-6">
           Sections
         </p>
+
+        {/* Engagement Dropdown */}
+        <div className="space-y-1">
+          <div
+            onClick={() => toggleMenu("engagement")}
+            className={dropdownHeaderClass([
+              { key: "chats" },
+              { key: "website-queries" },
+            ])}
+          >
+            <div className="flex items-center gap-3">
+              <MessageSquare size={18} /> <span>Engagement</span>
+            </div>
+            {openMenus.engagement ? (
+              <ChevronDown size={14} />
+            ) : (
+              <ChevronRight size={14} />
+            )}
+          </div>
+          {openMenus.engagement && (
+            <div className="pl-4 space-y-1 mt-1">
+              {[
+                { k: "chats", t: "Live Chats" },
+                { k: "website-queries", t: "Website Queries" },
+              ].map((item) => (
+                <div
+                  key={item.k}
+                  onClick={() => handleItemClick(item.k)}
+                  className={`flex items-center gap-3 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    activeSection === item.k
+                      ? "text-blue-400 bg-blue-400/10"
+                      : "text-slate-500 hover:text-slate-200 hover:bg-slate-800/30"
+                  }`}
+                >
+                  <div
+                    className={`w-1 h-1 rounded-full ${activeSection === item.k ? "bg-blue-400" : "bg-slate-600"}`}
+                  />
+                  {item.t}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Attendance Dropdown */}
         <div className="space-y-1">

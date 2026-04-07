@@ -91,6 +91,8 @@ app.use('/api/questions', require('./routes/questionRoutes'));
 app.use('/api/live-classes', require('./routes/liveClassRoutes'));
 app.use('/api/batches', require('./routes/batchRoutes'));
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
+app.use('/api/resume', require('./routes/resumeRoutes'));
+app.use('/api/website', require('./routes/websiteRoutes'));
 
 // Root check route
 app.get('/', (req, res) => {

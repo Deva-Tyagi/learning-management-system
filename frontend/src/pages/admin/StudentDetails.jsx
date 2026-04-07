@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import axios from "../../lib/axios";
 import AddStudentModal from "../../components/AddStudentModal";
+import BulkUploadModal from "../../components/BulkUploadModal";
 import { CSVLink } from "react-csv";
 import {
   Users, GraduationCap, CreditCard, BookOpen, Search,
-  Download, UserPlus, Calendar, Trophy, Trash2, Edit3, Activity,
+  Download, UserPlus, Calendar, Trophy, Trash2, Edit3, Activity, Upload
 } from "lucide-react";
 import API_BASE_URL from "../../lib/utils";
 
@@ -53,9 +54,29 @@ export default function StudentDetails() {
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const fetchStudents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const token = localStorage.getItem("adminToken");
+      if (!token) throw new Error("Authentication failed");
+      const res = await axios.get("/students/get", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = Array.isArray(res.data) ? res.data : [];
+      setStudents(data);
+    } catch (err) {
+      setError(err.message || "Failed to fetch student records");
+      setStudents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const width = useWindowWidth();
   const isMobile = width < 640;
@@ -63,33 +84,6 @@ export default function StudentDetails() {
   const isDesktop = width >= 1024;
 
   useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const token = localStorage.getItem("adminToken");
-        if (!token) throw new Error("Authentication failed");
-        const res = await axios.get("/students/get", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = Array.isArray(res.data) ? res.data : [];
-        console.log("[DEBUG] Fetch Students success. count:", data.length);
-        if (data.length > 0) {
-            console.log("[DEBUG] First student data sample:", {
-                _id: data[0]._id,
-                name: data[0].name,
-                hasID: !!data[0]._id
-            });
-        }
-        window.debugStudents = data; // For manual inspection
-        setStudents(data);
-      } catch (err) {
-        setError(err.message || "Failed to fetch student records");
-        setStudents([]);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchStudents();
   }, []);
 
@@ -251,6 +245,12 @@ export default function StudentDetails() {
               <Download size={13} /> Export List
             </button>
           </CSVLink>
+          <button
+            onClick={() => setShowBulkModal(true)}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "9px 18px", fontSize: 11, fontWeight: 700, color: "#fff", background: "#4f46e5", border: "none", borderRadius: 10, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.08em", boxShadow: "0 4px 14px rgba(79,70,229,0.2)", width: isMobile ? "100%" : "auto" }}
+          >
+            <Upload size={13} /> Import CSV
+          </button>
           <button
             onClick={() => { setEditingStudent(null); setShowModal(true); }}
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "9px 22px", fontSize: 11, fontWeight: 700, color: "#fff", background: "#0f172a", border: "none", borderRadius: 10, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.08em", boxShadow: "0 4px 14px rgba(15,23,42,0.15)", width: isMobile ? "100%" : "auto" }}
@@ -443,6 +443,15 @@ export default function StudentDetails() {
           onClose={handleModalClose}
           onStudentAdded={handleStudentAdded}
           onStudentUpdated={handleUpdate}
+        />
+      )}
+      
+      {showBulkModal && (
+        <BulkUploadModal
+          onClose={() => setShowBulkModal(false)}
+          onSuccess={() => {
+            fetchStudents();
+          }}
         />
       )}
 

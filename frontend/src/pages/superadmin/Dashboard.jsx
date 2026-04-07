@@ -13,10 +13,17 @@ import {
   CheckCircle2,
   Trophy,
   Users,
+  MessageSquare,
+  Mail,
+  Phone,
+  ArrowRight,
+  ExternalLink,
+  ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "./Sidebar";
 import API_BASE_URL from "../../lib/utils";
+import WhiteLabelManager from "./WhiteLabelManager";
 
 /* ─── Hook: real window width ─── */
 function useWindowWidth() {
@@ -42,6 +49,7 @@ export default function SuperAdminDashboard() {
   const [platformSettings, setPlatformSettings] = useState(null);
   const [localSettings, setLocalSettings] = useState(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [demoInquiries, setDemoInquiries] = useState([]);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -89,7 +97,7 @@ export default function SuperAdminDashboard() {
     setLoading(true);
     const token = localStorage.getItem("superAdminToken");
     try {
-      const [statsRes, clientsRes, activityRes, settingsRes] =
+      const [statsRes, clientsRes, activityRes, settingsRes, demoRes] =
         await Promise.all([
           fetch(`${API_BASE_URL}/super-admin/stats`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -103,26 +111,51 @@ export default function SuperAdminDashboard() {
           fetch(`${API_BASE_URL}/super-admin/settings`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
+          fetch(`${API_BASE_URL}/super-admin/demo-inquiries`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
         ]);
       if (statsRes.ok && clientsRes.ok && activityRes.ok && settingsRes.ok) {
-        const [statsData, clientsData, activityData, settingsData] =
+        const [statsData, clientsData, activityData, settingsData, demoData] =
           await Promise.all([
             statsRes.json(),
             clientsRes.json(),
             activityRes.json(),
             settingsRes.json(),
+            demoRes.ok ? demoRes.json() : [],
           ]);
         setStats(statsData);
         setClients(clientsData);
         setActivities(activityData);
         setPlatformSettings(settingsData);
         setLocalSettings(settingsData);
+        setDemoInquiries(demoData);
       }
     } catch (err) {
       console.error(err);
       toast.error("Failed to fetch data");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdateInquiryStatus = async (id, status) => {
+    const token = localStorage.getItem("superAdminToken");
+    try {
+      const res = await fetch(`${API_BASE_URL}/super-admin/demo-inquiries/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        toast.success(`Inquiry marked as ${status}`);
+        fetchData();
+      }
+    } catch (err) {
+      toast.error("Failed to update status");
     }
   };
 
@@ -662,6 +695,124 @@ export default function SuperAdminDashboard() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      /* ── STOREFRONTS ── */
+      case "storefronts":
+        return <WhiteLabelManager />;
+
+      /* ── DEMO INQUIRIES ── */
+      case "demo-inquiry":
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: 24, fontWeight: 900, color: "#0f172a" }}>Demo Inquiries</h1>
+                <p style={{ margin: "4px 0 0", fontSize: 14, color: "#64748b" }}>Manage and track all demo requests from landing page</p>
+              </div>
+              <button 
+                onClick={fetchData}
+                style={{ padding: "10px 16px", borderRadius: 12, background: "#f1f5f9", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "#475569" }}
+              >
+                Refresh
+              </button>
+            </div>
+
+            <div style={{ background: "#fff", borderRadius: 24, border: "1px solid #f1f5f9", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead style={{ background: "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
+                    <tr>
+                      <th style={{ padding: "16px 24px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>User Details</th>
+                      <th style={{ padding: "16px 24px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Institute & Plan</th>
+                      <th style={{ padding: "16px 24px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Date</th>
+                      <th style={{ padding: "16px 24px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Status</th>
+                      <th style={{ padding: "16px 24px", textAlign: "center", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {demoInquiries.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" style={{ padding: 48, textAlign: "center" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                            <ClipboardList size={48} color="#cbd5e1" />
+                            <p style={{ margin: 0, fontWeight: 600, color: "#94a3b8" }}>No inquiries found yet</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      demoInquiries.map((inq) => (
+                        <tr key={inq._id} style={{ borderBottom: "1px solid #f8fafc" }}>
+                          <td style={{ padding: "20px 24px" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{inq.name}</p>
+                              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                <span style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}><Mail size={12} /> {inq.email}</span>
+                                <span style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}><Phone size={12} /> {inq.phone}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: "20px 24px" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{inq.instituteName || "N/A"}</p>
+                              <span style={{ 
+                                fontSize: 10, 
+                                fontWeight: 800, 
+                                textTransform: "uppercase",
+                                color: inq.plan === 'enterprise' ? '#7c3aed' : inq.plan === 'professional' ? '#2563eb' : '#16a34a',
+                                background: inq.plan === 'enterprise' ? '#f5f3ff' : inq.plan === 'professional' ? '#eff6ff' : '#f0fdf4',
+                                padding: "2px 8px",
+                                borderRadius: 6,
+                                alignSelf: "flex-start"
+                              }}>
+                                {inq.plan || 'Trial'}
+                              </span>
+                            </div>
+                          </td>
+                          <td style={{ padding: "20px 24px", fontSize: 13, color: "#64748b" }}>
+                            {new Date(inq.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </td>
+                          <td style={{ padding: "20px 24px" }}>
+                            <select 
+                              value={inq.status}
+                              onChange={(e) => handleUpdateInquiryStatus(inq._id, e.target.value)}
+                              style={{ 
+                                padding: "6px 12px", 
+                                borderRadius: 8, 
+                                border: "1px solid #e2e8f0", 
+                                fontSize: 12, 
+                                fontWeight: 600,
+                                background: inq.status === 'Pending' ? '#fffbeb' : inq.status === 'Contacted' ? '#eff6ff' : inq.status === 'Converted' ? '#f0fdf4' : '#f8fafc',
+                                color: inq.status === 'Pending' ? '#92400e' : inq.status === 'Contacted' ? '#1e40af' : inq.status === 'Converted' ? '#166534' : '#475569',
+                                outline: "none"
+                              }}
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="Contacted">Contacted</option>
+                              <option value="Converted">Converted</option>
+                              <option value="Ignored">Ignored</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: "20px 24px", textAlign: "center" }}>
+                             <button 
+                               onClick={() => {
+                                 if (inq.message) alert(`Message from ${inq.name}:\n\n${inq.message}`);
+                                 else toast.info("No message provided");
+                               }}
+                               style={{ background: "none", border: "none", cursor: "pointer", color: "#6366f1" }}
+                               title="View Message"
+                             >
+                               <ArrowRight size={18} />
+                             </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

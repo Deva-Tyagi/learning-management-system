@@ -1,7 +1,7 @@
 const Note = require('../models/Note');
 const Student = require('../models/Student');
 const { sendWhatsappText } = require('../services/whatsapp.service');
-const { sendEmailNotification } = require('../services/email.service');
+const { sendEmailNotification } = require('../services/emailService');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');

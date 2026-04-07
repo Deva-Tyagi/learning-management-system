@@ -61,19 +61,38 @@ export default function StudentSidebar({
           Main Menu
         </p>
 
-        <div onClick={() => handleItemClick("dashboard")} className={navItemClass("dashboard")}>
+        <div
+          onClick={() => handleItemClick("dashboard")}
+          className={navItemClass("dashboard")}
+        >
           <LayoutDashboard size={18} /> <span>Dashboard</span>
         </div>
 
-        <div onClick={() => handleItemClick("exams")} className={navItemClass("exams")}>
+        <div
+          onClick={() => handleItemClick("resume-maker")}
+          className={navItemClass("resume-maker")}
+        >
+          <FileText size={18} /> <span>Resume Builder</span>
+        </div>
+
+        <div
+          onClick={() => handleItemClick("exams")}
+          className={navItemClass("exams")}
+        >
           <Calendar size={18} /> <span>Available Exams</span>
         </div>
 
-        <div onClick={() => handleItemClick("live-classes")} className={navItemClass("live-classes")}>
+        <div
+          onClick={() => handleItemClick("live-classes")}
+          className={navItemClass("live-classes")}
+        >
           <Video size={18} /> <span>Live Classes</span>
         </div>
 
-        <div onClick={() => handleItemClick("results")} className={navItemClass("results")}>
+        <div
+          onClick={() => handleItemClick("results")}
+          className={navItemClass("results")}
+        >
           <Trophy size={18} /> <span>My Results</span>
         </div>
 
@@ -81,32 +100,50 @@ export default function StudentSidebar({
           Resources
         </p>
 
-        <div onClick={() => handleItemClick("certificates")} className={navItemClass("certificates")}>
+        <div
+          onClick={() => handleItemClick("certificates")}
+          className={navItemClass("certificates")}
+        >
           <Award size={18} /> <span>Certificates</span>
         </div>
 
-        <div onClick={() => handleItemClick("id-card")} className={navItemClass("id-card")}>
+        <div
+          onClick={() => handleItemClick("id-card")}
+          className={navItemClass("id-card")}
+        >
           <CreditCard size={18} /> <span>My ID Card</span>
         </div>
 
-        <div onClick={() => handleItemClick("fees")} className={navItemClass("fees")}>
+        <div
+          onClick={() => handleItemClick("fees")}
+          className={navItemClass("fees")}
+        >
           <FileText size={18} /> <span>My Fees</span>
         </div>
 
-        <div onClick={() => handleItemClick("notes")} className={navItemClass("notes")}>
+        <div
+          onClick={() => handleItemClick("notes")}
+          className={navItemClass("notes")}
+        >
           <StickyNote size={18} /> <span>Study Notes</span>
         </div>
       </nav>
 
       {/* Footer */}
-      <div className={`${mobile ? "p-3" : "p-4"} border-t border-slate-800 bg-slate-800/20`}>
+      <div
+        className={`${mobile ? "p-3" : "p-4"} border-t border-slate-800 bg-slate-800/20`}
+      >
         <div className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-slate-800/50 transition-all cursor-pointer group">
           <div className="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-blue-400 border border-slate-700 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-500 transition-all">
             <UserCircle size={20} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-bold text-slate-200 truncate">{studentData?.name || "Student"}</p>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">{studentData?.rollNumber || "ID NO"}</p>
+            <p className="text-[13px] font-bold text-slate-200 truncate">
+              {studentData?.name || "Student"}
+            </p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+              {studentData?.rollNumber || "ID NO"}
+            </p>
           </div>
           <button
             onClick={handleLogout}

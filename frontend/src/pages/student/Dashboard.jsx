@@ -10,6 +10,7 @@ import CertificatesSection from "./Certificates";
 import StudentIdCardSection from "./StudentIdCard";
 import FeesSection from "./Fees";
 import NotesSection from "./Notes";
+import ResumeMakerSection from "./ResumeMaker";
 
 /* ─── Hook: real window width ─── */
 function useWindowWidth() {
@@ -86,6 +87,7 @@ export default function StudentDashboard() {
       case "id-card":       return <StudentIdCardSection {...props} />;
       case "fees":          return <FeesSection {...props} />;
       case "notes":         return <NotesSection {...props} />;
+      case "resume-maker":  return <ResumeMakerSection {...props} />;
       default:              return <ExamsSection {...props} />;
     }
   };

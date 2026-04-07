@@ -32,6 +32,7 @@ import AnalyticsSection from "./Analytics";
 import LeaderboardSection from "./Leaderboard";
 import ManageBatches from "./ManageBatches";
 import ProfileSection from "./Profile";
+import WebsiteQueries from "./WebsiteQueries";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -135,6 +136,8 @@ export default function AdminDashboard() {
         return <CardManagement {...props} />;
       case "certificates":
         return <CertificatesSection {...props} />;
+      case "website-queries":
+        return <WebsiteQueries {...props} />;
       case "franchise-management":
         return <FranchiseManagement {...props} />;
       case "id-cards":

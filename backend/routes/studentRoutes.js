@@ -9,7 +9,8 @@ const {
   deleteStudent,
   resetStudentPassword,
   loginStudent,
-  previewRegistrationNumber
+  previewRegistrationNumber,
+  bulkUploadStudents
 } = require('../controllers/studentController');
 const auth = require('../middleware/authMiddleware');
 const logActivity = require('../middleware/activityLogger');
@@ -37,6 +38,9 @@ router.put('/update/:id', auth, uploadImage.fields([
 ]), updateStudent);
 router.delete('/delete/:id', auth, deleteStudent);
 router.put('/reset-password/:id', auth, resetStudentPassword);
+
+const uploadMemory = multer({ storage: multer.memoryStorage() });
+router.post('/bulk-upload', auth, uploadMemory.single('file'), bulkUploadStudents);
 
 // ----------- NEW: Student Photo Upload/Update Route -----------
 router.post('/photo/:id', auth, uploadImage.single('photo'), async (req, res) => {

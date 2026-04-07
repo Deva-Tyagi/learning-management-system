@@ -2,8 +2,10 @@ const SuperAdmin = require("../models/SuperAdmin");
 const Admin = require("../models/Admin");
 const ActivityLog = require("../models/ActivityLog");
 const GlobalSetting = require("../models/GlobalSetting");
+const DemoInquiry = require("../models/DemoInquiry");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { sendDemoInquiryEmail } = require("../services/emailService");
 
 // ✅ Register SuperAdmin (Postman only)
 exports.registerSuperAdmin = async (req, res) => {
@@ -246,5 +248,58 @@ exports.updateGlobalSettings = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: "Error updating global settings" });
+  }
+};
+
+// ✅ Demo Inquiries
+exports.submitDemoInquiry = async (req, res) => {
+  try {
+    const { name, email, phone, instituteName, plan, message } = req.body;
+    
+    if (!name || !email || !phone) {
+      return res.status(400).json({ msg: "Name, email and phone are required" });
+    }
+
+    const newInquiry = new DemoInquiry({
+      name,
+      email,
+      phone,
+      instituteName,
+      plan,
+      message,
+    });
+
+    await newInquiry.save();
+
+    // Send styled email
+    await sendDemoInquiryEmail({ name, email, phone, instituteName, plan, message });
+
+    res.status(201).json({ msg: "Inquiry submitted successfully" });
+  } catch (err) {
+    console.error("Error submitting demo inquiry:", err);
+    res.status(500).json({ msg: "Server Error" });
+  }
+};
+
+exports.getDemoInquiries = async (req, res) => {
+  try {
+    const inquiries = await DemoInquiry.find().sort({ createdAt: -1 });
+    res.json(inquiries);
+  } catch (err) {
+    console.error("Error fetching demo inquiries:", err);
+    res.status(500).json({ msg: "Server Error" });
+  }
+};
+
+exports.updateDemoInquiryStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const inquiry = await DemoInquiry.findByIdAndUpdate(id, { status }, { new: true });
+    if (!inquiry) return res.status(404).json({ msg: "Inquiry not found" });
+    res.json(inquiry);
+  } catch (err) {
+    console.error("Error updating inquiry status:", err);
+    res.status(500).json({ msg: "Server Error" });
   }
 };

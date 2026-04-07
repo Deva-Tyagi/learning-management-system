@@ -327,3 +327,177 @@ exports.resetStudentPassword = async (req, res) => {
     res.status(500).json({ msg: 'Error resetting password', error: error.message });
   }
 };
+
+const csv = require('csv-parser');
+const stream = require('stream');
+
+exports.bulkUploadStudents = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ msg: 'No CSV file uploaded' });
+    }
+
+    const GlobalSetting = require('../models/GlobalSetting');
+    const Admin = require('../models/Admin');
+    const settings = await GlobalSetting.findOne();
+    const admin = await Admin.findById(req.user.id);
+
+    let quotaLimit = 10000;
+    if (settings && admin) {
+      const plan = admin.plan?.toLowerCase() || 'basic';
+      const limitKey = plan === 'basic' ? 'basicStudentLimit' : plan === 'premium' || plan === 'professional' ? 'professionalStudentLimit' : 'enterpriseStudentLimit';
+      quotaLimit = settings.quotas?.[plan + 'StudentLimit'] || settings.quotas?.[limitKey] || 10000;
+      
+      const currentCount = await Student.countDocuments({ adminId: req.user.id });
+      if (currentCount >= quotaLimit) {
+        return res.status(403).json({ msg: `Enrollment limit reached (${quotaLimit}). Upgrade plan to add more.`, limit: quotaLimit });
+      }
+    }
+
+    const studentsToProcess = [];
+    let invalidCount = 0;
+    
+    // Read CSV from buffer
+    const bufferStream = new stream.PassThrough();
+    bufferStream.end(req.file.buffer);
+
+    bufferStream
+      .pipe(csv())
+      .on('data', (data) => {
+        try {
+          // Find matching keys ignoring cases, trims, and non-printable chars (BOM etc)
+          const findVal = (keyStr) => {
+            const normalizedKeyStr = keyStr.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            const key = Object.keys(data).find(k => {
+              const normalizedK = k.trim().replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+              return normalizedK === normalizedKeyStr;
+            });
+            return key && data[key] ? String(data[key]).trim() : '';
+          };
+
+          const name = findVal('fullname') || findVal('name'); 
+          const email = findVal('email').toLowerCase();
+          const phone = findVal('phone');
+          const course = findVal('course');
+          const batch = findVal('batch');
+          const username = findVal('username');
+          const password = findVal('password') || 'student123';
+
+          // Required Check according to Manual Form
+          if (name && email && phone && course && batch && username) {
+            const admissionDateStr = findVal('admissiondate');
+            const dobStr = findVal('dateofbirth') || findVal('dob');
+            const fStatus = findVal('feestatus').toLowerCase();
+
+            studentsToProcess.push({
+              name,
+              email,
+              phone,
+              course,
+              batch,
+              username,
+              password,
+              franchise: findVal('franchise'),
+              registrationNo: findVal('registrationno'),
+              admissionDate: admissionDateStr ? new Date(admissionDateStr) : Date.now(),
+              rollNumber: findVal('rollnumber'),
+              totalFees: Number(findVal('totalfees')) || 0,
+              feesPaid: Number(findVal('feespaid')) || 0,
+              feeStatus: ['paid', 'unpaid', 'partial'].includes(fStatus) ? fStatus : 'unpaid',
+              dob: dobStr ? new Date(dobStr) : null,
+              gender: findVal('gender'),
+              bloodGroup: findVal('bloodgroup'),
+              referralCode: findVal('referralcode'),
+              address: findVal('address'),
+              state: findVal('state'),
+              district: findVal('district'),
+              city: findVal('city'),
+              pincode: findVal('pincode'),
+              fatherName: findVal('fathername'),
+              motherName: findVal('mothername'),
+              guardianPhone: findVal('guardianphone'),
+              guardianAddress: findVal('guardianaddress'),
+              status: findVal('studentstatus') || findVal('status') || 'Active',
+              adminId: req.user.id,
+              isActive: (findVal('studentstatus') || findVal('status') || 'Active') === 'Active',
+              firstLogin: true
+            });
+          } else {
+            console.log(`[BULK] Skipping row: Missing required fields: ${JSON.stringify({ name:!!name, email:!!email, phone:!!phone, course:!!course, batch:!!batch, username:!!username })}`);
+            invalidCount++;
+          }
+        } catch (rowErr) {
+           console.error("[BULK] Error parsing row:", rowErr);
+           invalidCount++;
+        }
+      })
+      .on('end', async () => {
+        try {
+          let added = 0;
+          let skipped = 0;
+
+          console.log(`[BULK] Starting processing of ${studentsToProcess.length} valid rows...`);
+
+          for (const sData of studentsToProcess) {
+            try {
+              // Check quota dynamically
+              const currentCount = await Student.countDocuments({ adminId: req.user.id });
+              if (currentCount >= quotaLimit) {
+                 console.warn(`[BULK] Stopped: Quota limit (${quotaLimit}) reached mid-upload.`);
+                 break; 
+              }
+
+              const existingStudent = await Student.findOne({ email: sData.email });
+              if (existingStudent) {
+                skipped++;
+                continue;
+              }
+
+              // If registrationNo is provided in CSV, ensure it's unique, otherwise generate it
+              if (sData.registrationNo) {
+                const clash = await Student.findOne({ adminId: req.user.id, registrationNo: sData.registrationNo });
+                if (clash) {
+                   sData.registrationNo = await ensureUniqueRegistrationNo(req.user.id, '');
+                }
+              } else {
+                sData.registrationNo = await ensureUniqueRegistrationNo(req.user.id, '');
+              }
+
+              const newStudent = new Student(sData);
+              await newStudent.save(); 
+              added++;
+            } catch (saveErr) {
+              console.error(`[BULK] Failed to save student ${sData.email}:`, saveErr.message);
+              invalidCount++; // Treat individual save failures as invalid rows for the report
+            }
+          }
+
+          console.log(`[BULK] Finished. Added: ${added}, Skipped/Dupes: ${skipped}, Failed/Invalid: ${invalidCount}`);
+
+          res.status(200).json({ 
+            msg: `Bulk upload complete. Added: ${added}, Skipped (Duplicates): ${skipped}, Invalid (Format/Error): ${invalidCount}`,
+            added,
+            skipped,
+            invalidCount
+          });
+        } catch (endErr) {
+          console.error('[BULK] Error in final processing loop:', endErr);
+          if (!res.headersSent) {
+            res.status(500).json({ msg: 'Bulk process failed during save', error: endErr.message });
+          }
+        }
+      })
+      .on('error', (err) => {
+        console.error('[BULK] CSV Stream Error:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ msg: 'Error reading CSV file', error: err.message });
+        }
+      });
+
+  } catch (error) {
+    console.error('[BULK] Unhandled Controller Error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ msg: 'Internal server error', error: error.message });
+    }
+  }
+};

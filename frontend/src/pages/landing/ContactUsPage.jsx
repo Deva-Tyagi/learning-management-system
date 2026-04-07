@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import API_BASE_URL from "../../lib/utils";
+import { toast } from "sonner";
 
 const ContactInfoCard = ({ icon, label, value, sub }) => (
   <div className="flex items-start gap-4 p-5 rounded-2xl bg-white/5 border border-white/10 hover:border-violet-500/30 transition-all duration-300">
@@ -33,9 +35,33 @@ const ContactUsPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setLoading(false);
-    setSubmitted(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/super-admin/public/demo-inquiry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          phone: form.phone,
+          instituteName: form.institute,
+          plan: form.plan,
+          message: form.message,
+        }),
+      });
+
+      if (response.ok) {
+        setSubmitted(true);
+        toast.success("Demo request submitted successfully!");
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.msg || "Failed to submit request. Please try again.");
+      }
+    } catch (err) {
+      console.error("Submission error:", err);
+      toast.error("Network error. Please check your connection.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -259,13 +285,13 @@ const ContactUsPage = () => {
                         Select a plan...
                       </option>
                       <option value="starter" className="bg-[#0f1729]">
-                        Starter — ₹2,499/month
+                        Starter — ₹1,500/month
                       </option>
                       <option value="professional" className="bg-[#0f1729]">
-                        Professional — ₹5,999/month
+                        Growth (Pro) — ₹2,000/month
                       </option>
                       <option value="enterprise" className="bg-[#0f1729]">
-                        Enterprise — Custom pricing
+                        Elite (Enterprise) — ₹3,000/month
                       </option>
                       <option value="trial" className="bg-[#0f1729]">
                         Just a Free Trial
