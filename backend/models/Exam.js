@@ -94,6 +94,10 @@ const examSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  automaticSerialization: {
+    type: Boolean,
+    default: true
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin'

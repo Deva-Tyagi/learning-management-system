@@ -12,6 +12,7 @@ const Fee = require("../models/Fee");
 const Enrollment = require("../models/Enrollment");
 const FeeSchedule = require("../models/FeeSchedule");
 const Payment = require("../models/Payment");
+const Staff = require("../models/Staff");
 
 // ✅ Register Admin
 exports.registerAdmin = async (req, res) => {
@@ -40,23 +41,50 @@ exports.registerAdmin = async (req, res) => {
   }
 };
 
-// ✅ Login Admin
+// ✅ Login Admin (Unified for Owner and Staff)
 exports.loginAdmin = async (req, res) => {
   const { email: rawEmail, password } = req.body;
   const email = (rawEmail || '').toLowerCase().trim();
   try {
-    const admin = await Admin.findOne({ email });
-    if (!admin) return res.status(400).json({ msg: "Invalid Credentials" });
+    // 1. Try to find as Admin (Owner)
+    let user = await Admin.findOne({ email });
+    let role = "Admin";
+    let adminId = null;
 
-    const isMatch = await bcrypt.compare(password, admin.password);
+    if (!user) {
+      // 2. Try to find as Staff
+      user = await Staff.findOne({ email });
+      if (!user) return res.status(400).json({ msg: "Invalid Credentials" });
+      role = user.role;
+      adminId = user.adminId;
+      if (!user.isActive) return res.status(403).json({ msg: "Account is disabled. Please contact admin." });
+    } else {
+      adminId = user._id; // Owner's adminId is their own ID
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ msg: "Invalid Credentials" });
 
+    // Payload includes the true owner's ID as 'id' for filtering consistency, 
+    // and 'staffId' if it's a sub-account.
     const token = jwt.sign(
-      { id: admin._id, isAdmin: true },
+      { 
+        id: adminId, 
+        staffId: role === "Admin" ? null : user._id,
+        role: role,
+        name: user.name,
+        isAdmin: role === "Admin"
+      },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
-    res.json({ token, isTemporaryPassword: admin.isTemporaryPassword });
+
+    res.json({ 
+      token, 
+      role, 
+      name: user.name,
+      isTemporaryPassword: user.isTemporaryPassword || false 
+    });
   } catch (err) {
     console.error(err);
     res.status(500).send("Server Error");

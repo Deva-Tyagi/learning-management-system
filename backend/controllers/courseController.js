@@ -9,7 +9,7 @@ exports.getCoursesLite = async (req, res) => {
   try {
     const courses = await Course.find(
       { isActive: true, adminId: req.user.id },
-      { name: 1, monthlyFee: 1, durationMonths: 1, totalFee: 1, fees: 1 }
+      { name: 1, monthlyFee: 1, durationMonths: 1, totalFee: 1, fees: 1, feeType: 1, defaultInstallments: 1 }
     )
       .sort({ name: 1 })
       .lean();
@@ -27,7 +27,9 @@ exports.getCoursesLite = async (req, res) => {
         name: c.name,
         monthlyFee: monthly || 0,
         durationMonths: duration || 0,
-        totalFee: total || 0
+        totalFee: total || 0,
+        feeType: c.feeType || 'Fixed',
+        defaultInstallments: c.defaultInstallments || 3
       };
     });
 
@@ -107,7 +109,7 @@ exports.addCourse = async (req, res) => {
     if (req.file) courseData.image = req.file.location;
 
     // Parse arrays safely
-    const arrayFields = ['learningOutcomes', 'whyThisCourse', 'prerequisites', 'toolsUsed', 'careerOpportunities', 'curriculum'];
+    const arrayFields = ['learningOutcomes', 'whyThisCourse', 'prerequisites', 'toolsUsed', 'careerOpportunities', 'curriculum', 'subjects'];
     arrayFields.forEach(field => {
       if (courseData[field] && typeof courseData[field] === 'string') {
         try {
@@ -141,10 +143,6 @@ exports.addCourse = async (req, res) => {
 
     // Required validations
     if (!courseData.name || courseData.name.trim() === '') {
-      if (req.file) {
-        const filePath = path.join(__dirname, '../uploads/courses', req.file.filename);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      }
       return res.status(400).json({ msg: 'Course name is required' });
     }
 
@@ -190,7 +188,7 @@ exports.updateCourse = async (req, res) => {
     }
 
     // Parse arrays
-    const arrayFields = ['learningOutcomes', 'whyThisCourse', 'prerequisites', 'toolsUsed', 'careerOpportunities', 'curriculum'];
+    const arrayFields = ['learningOutcomes', 'whyThisCourse', 'prerequisites', 'toolsUsed', 'careerOpportunities', 'curriculum', 'subjects'];
     arrayFields.forEach(field => {
       if (updateData[field] && typeof updateData[field] === 'string') {
         try {
@@ -224,6 +222,16 @@ exports.updateCourse = async (req, res) => {
       return res.status(400).json({ msg: 'Course name cannot be empty' });
     }
 
+    // Check for duplicate name if changed
+    if (updateData.name) {
+      const existing = await Course.findOne({ 
+        name: updateData.name.trim(), 
+        adminId: req.user.id,
+        _id: { $ne: courseId }
+      });
+      if (existing) return res.status(400).json({ msg: 'Another course already has this name' });
+    }
+
     const course = await Course.findOneAndUpdate(
       { _id: courseId, adminId: req.user.id },
       updateData,
@@ -239,10 +247,6 @@ exports.updateCourse = async (req, res) => {
     res.json({ msg: 'Course updated successfully', course: c });
   } catch (error) {
     console.error('Error in updateCourse:', error);
-    if (req.file) {
-      const filePath = path.join(__dirname, '../uploads/courses', req.file.filename);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    }
     if (error.name === 'ValidationError') {
       const validationErrors = Object.values(error.errors).map(err => err.message);
       res.status(400).json({ msg: 'Validation error', errors: validationErrors });

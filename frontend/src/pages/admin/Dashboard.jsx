@@ -6,7 +6,8 @@ import API_BASE_URL from "../../lib/utils";
 
 import Sidebar from "./Sidebar";
 import StudentsSection from "./StudentDetails";
-import CoursesSection from "./CourseDetails";
+import StudentReports from "./StudentReports";
+import CourseDetails from "./CourseDetails";
 import NotesSection from "./Notes";
 import FeesSection from "./Fees";
 import IdCardsSection from "./IdCards";
@@ -29,8 +30,11 @@ import FranchiseManagement from "./FranchiseManagement";
 import CardManagement from "./CardManagement";
 import LiveClassesSection from "./LiveClasses";
 import AnalyticsSection from "./Analytics";
+import LiveChats from "./LiveChats"; // NEW
 import LeaderboardSection from "./Leaderboard";
 import ManageBatches from "./ManageBatches";
+import ManageStaff from "./ManageStaff";
+import DesignCards from "./DesignCards"; // NEW
 import ProfileSection from "./Profile";
 import WebsiteQueries from "./WebsiteQueries";
 
@@ -45,11 +49,21 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const storedToken = localStorage.getItem("adminToken");
+    const role = localStorage.getItem("adminRole") || "Admin";
     const isTemp = localStorage.getItem("isAdminTempPassword") === "true";
+
     if (!storedToken) {
       navigate("/admin/login");
       return;
     }
+
+    // Set default section based on role if it was still "analytics"
+    if (activeSection === "analytics") {
+      if (role === "Teacher") setActiveSection("staff-attendance");
+      else if (role === "Receptionist") setActiveSection("students-add");
+      else setActiveSection("analytics");
+    }
+
     setToken(storedToken);
     setIsTempPassword(isTemp);
   }, [navigate]);
@@ -102,10 +116,34 @@ export default function AdminDashboard() {
   const renderSection = () => {
     const props = { token };
     switch (activeSection) {
+      // Students subsections
       case "students":
-        return <StudentsSection {...props} />;
+      case "students-list":
+        return (
+          <StudentsSection {...props} setActiveSection={setActiveSection} />
+        );
+      case "students-add":
+        return (
+          <StudentsSection
+            {...props}
+            setActiveSection={setActiveSection}
+            openAddModal
+          />
+        );
+      case "students-reports":
+        return <StudentReports {...props} />;
+      case "courses-all":
+      case "courses-add":
+      case "courses-subjects":
+      case "courses-materials":
       case "courses":
-        return <CoursesSection {...props} />;
+        return (
+          <CourseDetails
+            {...props}
+            activeSection={activeSection}
+            setActiveSection={setActiveSection}
+          />
+        );
       case "notes":
         return <NotesSection {...props} />;
       case "fees":
@@ -133,7 +171,8 @@ export default function AdminDashboard() {
       case "exam-reports":
         return <ExamReportsSection {...props} />;
       case "card-management":
-        return <CardManagement {...props} />;
+      case "design-cards":
+        return <DesignCards {...props} />;
       case "certificates":
         return <CertificatesSection {...props} />;
       case "website-queries":
@@ -150,10 +189,18 @@ export default function AdminDashboard() {
         return <AllIdCardsSection {...props} />;
       case "live-classes":
         return <LiveClassesSection {...props} />;
-      case "batch-management":
+      case "batches":
+      case "manage-batches":
         return <ManageBatches {...props} />;
+      case "manage-staff":
+      case "staff-attendance":
+      case "staff-payroll":
+      case "institute-holidays":
+        return <ManageStaff {...props} activeSection={activeSection} />;
       case "analytics":
         return <AnalyticsSection {...props} />;
+      case "chats":
+        return <LiveChats {...props} />;
       case "leaderboard":
         return <LeaderboardSection {...props} />;
       case "profile":
@@ -289,7 +336,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Main content area */}
-      <div className="flex-1 flex flex-col transition-all duration-300">
+      <div className="flex-1 flex flex-col transition-all duration-300 min-w-0 overflow-x-hidden">
         {/* REVERSE: mobile-style header now appears on LARGE screens */}
         <header className="hidden lg:flex sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm px-4 py-3 items-center justify-between">
           <span className="text-lg font-bold text-slate-800">Admin Panel</span>
@@ -302,8 +349,8 @@ export default function AdminDashboard() {
           </button>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <div className="max-w-[1700px] mx-auto min-h-full">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 min-w-0">
+          <div className="max-w-[1700px] mx-auto min-h-full min-w-0">
             {renderSection()}
           </div>
         </main>

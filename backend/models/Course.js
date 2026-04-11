@@ -3,12 +3,13 @@ const mongoose = require('mongoose');
 
 const courseSchema = new mongoose.Schema({
   // Basic course info
-  name: { type: String, required: true, trim: true, unique: true },
+  name:       { type: String, required: true, trim: true, unique: true },
+  courseCode: { type: String, trim: true, default: '' },           // NEW — auto or manual
   category: {
     type: String,
     required: true,
     enum: ['computerCourses', 'englishCourses', 'distanceLearning'],
-    default: 'computerCourses'
+    default: 'computerCourses',
   },
   link: { type: String, default: '#' },
 
@@ -26,7 +27,12 @@ const courseSchema = new mongoose.Schema({
   durationMonths: { type: Number, default: 0 },
   totalFee: { type: Number, default: 0 },
 
-  level: { type: String, enum: ['Beginner', 'Intermediate', 'Advanced'], default: 'Beginner' },
+  level:  { type: String, enum: ['Beginner', 'Intermediate', 'Advanced'], default: 'Beginner' },
+  feeType: { type: String, enum: ['Monthly', 'Fixed'], default: 'Fixed' }, // NEW — sets default scheme
+  defaultInstallments: { type: Number, default: 3 }, // NEW — default split for Fixed courses
+  status: { type: String, enum: ['Active', 'Inactive', 'Completed'], default: 'Active' }, // NEW
+  // Subjects linked to this course (ref Subject model)
+  subjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],  // NEW
 
   // Arrays
   learningOutcomes: [String],

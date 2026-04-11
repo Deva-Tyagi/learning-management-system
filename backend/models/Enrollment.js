@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const enrollmentSchema = new mongoose.Schema({
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
   courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+  batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch' }, // NEW
   courseName: { type: String, required: true },
   doj: { type: Date, required: true },
   scheme: { type: String, enum: ['MONTHLY', 'FULL', 'INSTALLMENT'], required: true },

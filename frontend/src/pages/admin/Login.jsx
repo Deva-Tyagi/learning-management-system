@@ -30,6 +30,7 @@ export default function AdminLogin() {
 
       if (res.ok) {
         localStorage.setItem('adminToken', data.token);
+        localStorage.setItem('adminRole', data.role); // <-- PERSIST ROLE
         localStorage.setItem('isAdminTempPassword', data.isTemporaryPassword);
         localStorage.setItem('adminEmail', formData.email);
         toast.success('Successfully authenticated');

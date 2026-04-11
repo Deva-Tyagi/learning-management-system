@@ -1,19 +1,17 @@
-import { useEffect, useState } from "react";
-import API_BASE_URL from "../../lib/utils";
-import {
-  Plus, Trash2, Edit3, BookOpen, Clock, Layers, CheckCircle,
-  XCircle, FilePlus, Loader2, ChevronDown, ChevronUp, ChevronRight,
-  Database, Award, Activity, GraduationCap, Settings,
-  Image as ImageIcon,
-} from "lucide-react";
+import React, { useEffect, useState } from "react";
+import axios from "../../lib/axios";
 import { toast } from "sonner";
+import {
+  Plus, Edit3, Trash2, FilePlus2, BookMarked, FileText, X,
+  Database, IndianRupee, FileDown, Upload, File
+} from "lucide-react";
 
 /* ─── Hook: real window width ─── */
 function useWindowWidth() {
-  const [width, setWidth] = useState(
+  const [width, setWidth] = React.useState(
     typeof window !== "undefined" ? window.innerWidth : 1024
   );
-  useEffect(() => {
+  React.useEffect(() => {
     const handler = () => setWidth(window.innerWidth);
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
@@ -21,568 +19,512 @@ function useWindowWidth() {
   return width;
 }
 
-const INITIAL_COURSE = {
-  name: "", category: "computerCourses", shortDescription: "",
-  fullDescription: "", duration: "", fees: "", level: "Beginner",
-  learningOutcomes: [""], whyThisCourse: [""],
-  prerequisites: [""], toolsUsed: [""], careerOpportunities: [""],
-  curriculum: [{ module: "", topics: [""], duration: "" }],
-};
+/* ── Shared style tokens ── */
+const lbl = { fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6, display: "block" };
+const inp = { width: "100%", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 600, color: "#334155", outline: "none", boxSizing: "border-box" };
+const btnPrimary = { padding: "10px 20px", background: "#0f172a", color: "#fff", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 };
 
-export default function CourseDetails({ token }) {
+/* ── DynamicList ── */
+function DynamicList({ label, items, onChange, placeholder }) {
+  const add = () => onChange([...items, ""]);
+  const update = (i, val) => { const n = [...items]; n[i] = val; onChange(n); };
+  const remove = i => onChange(items.filter((_, idx) => idx !== i));
+  return (
+    <div style={{ background: "#f8fafc", padding: 16, borderRadius: 12, border: "1px solid #e2e8f0" }}>
+      <label style={{ ...lbl, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        {label}
+        <button type="button" onClick={add} style={{ background: "none", border: "none", color: "#3b82f6", cursor: "pointer", display: "flex" }}><Plus size={14} /></button>
+      </label>
+      <div style={{ display: "grid", gap: 10 }}>
+        {items.map((item, i) => (
+          <div key={i} style={{ display: "flex", gap: 8 }}>
+            <input value={item} onChange={e => update(i, e.target.value)} style={{ ...inp, flex: 1 }} placeholder={placeholder} />
+            <button type="button" onClick={() => remove(i)} style={{ padding: "0 10px", background: "#fee2e2", border: "none", borderRadius: 8, color: "#ef4444", cursor: "pointer" }}><Trash2 size={14} /></button>
+          </div>
+        ))}
+        {items.length === 0 && <div style={{ fontSize: 11, color: "#94a3b8" }}>No items added.</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ── CurriculumBuilder ── */
+function CurriculumBuilder({ curriculum, onChange }) {
+  const addModule = () => onChange([...curriculum, { module: "", topics: [""], duration: "" }]);
+  const updateMod = (i, field, val) => { const n = [...curriculum]; n[i][field] = val; onChange(n); };
+  const addTopic = (i) => { const n = [...curriculum]; n[i].topics.push(""); onChange(n); };
+  const setTopic = (i, tIdx, val) => { const n = [...curriculum]; n[i].topics[tIdx] = val; onChange(n); };
+  const remTopic = (i, tIdx) => { const n = [...curriculum]; n[i].topics.splice(tIdx, 1); onChange(n); };
+  const remMod = i => onChange(curriculum.filter((_, idx) => idx !== i));
+
+  return (
+    <div style={{ background: "#f8fafc", padding: 16, borderRadius: 12, border: "1px solid #e2e8f0" }}>
+      <label style={{ ...lbl, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        Curriculum Modules
+        <button type="button" onClick={addModule} style={{ background: "#e0e7ff", padding: "4px 8px", borderRadius: 6, border: "none", color: "#4f46e5", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>+ Add Module</button>
+      </label>
+      <div style={{ display: "grid", gap: 16, marginTop: 10 }}>
+        {curriculum.map((m, i) => (
+          <div key={i} style={{ background: "#fff", border: "1px solid #e2e8f0", padding: 12, borderRadius: 8 }}>
+            <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+              <input value={m.module} onChange={e => updateMod(i, "module", e.target.value)} style={{ ...inp, flex: "2 1 160px" }} placeholder="Module Name (e.g. Basics of UI)" />
+              <input value={m.duration} onChange={e => updateMod(i, "duration", e.target.value)} style={{ ...inp, flex: "1 1 120px" }} placeholder="Duration (e.g. 2 Weeks)" />
+              <button type="button" onClick={() => remMod(i)} style={{ padding: "0 10px", background: "#fee2e2", border: "none", borderRadius: 8, color: "#ef4444", cursor: "pointer" }}><Trash2 size={14} /></button>
+            </div>
+            <div style={{ paddingLeft: 10, borderLeft: "2px solid #e2e8f0", display: "grid", gap: 8 }}>
+              {m.topics.map((t, tIdx) => (
+                <div key={tIdx} style={{ display: "flex", gap: 6 }}>
+                  <input value={t} onChange={e => setTopic(i, tIdx, e.target.value)} style={{ ...inp, padding: "6px 10px", fontSize: 11 }} placeholder="Topic Name" />
+                  <button type="button" onClick={() => remTopic(i, tIdx)} style={{ background: "none", color: "#94a3b8", border: "none", cursor: "pointer" }}><X size={14} /></button>
+                </div>
+              ))}
+              <button type="button" onClick={() => addTopic(i)} style={{ justifySelf: "start", fontSize: 10, background: "none", border: "none", color: "#3b82f6", cursor: "pointer", fontWeight: 700 }}>+ Add Topic</button>
+            </div>
+          </div>
+        ))}
+        {curriculum.length === 0 && <div style={{ fontSize: 11, color: "#94a3b8" }}>No modules added.</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
+ * 1. ALL COURSES
+ * ───────────────────────────────────────────────────── */
+function AllCourses({ token, setActiveSection, setEditingCourseId }) {
   const [courses, setCourses] = useState([]);
-  const [newCourse, setNewCourse] = useState(INITIAL_COURSE);
-  const [editingCourse, setEditingCourse] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   const width = useWindowWidth();
   const isMobile = width < 640;
-  const isDesktop = width >= 1024;
 
   const fetchCourses = async () => {
-    if (!token) return;
-    setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/courses`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (res.ok) setCourses(Array.isArray(data) ? data : []);
+      const { data } = await axios.get("/courses", { headers: { Authorization: `Bearer ${token}` } });
+      setCourses(data);
     } catch { toast.error("Failed to load courses"); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchCourses(); }, [token]);
+  useEffect(() => { fetchCourses(); }, []);
 
-  const handleArrayChange = (field, index, value) =>
-    setNewCourse(p => ({ ...p, [field]: p[field].map((x, i) => i === index ? value : x) }));
-  const addArrayItem = (field) =>
-    setNewCourse(p => ({ ...p, [field]: [...p[field], ""] }));
-  const removeArrayItem = (field, index) =>
-    setNewCourse(p => ({ ...p, [field]: p[field].filter((_, i) => i !== index) }));
-
-  const handleCurriculumChange = (modIdx, field, value) =>
-    setNewCourse(p => ({ ...p, curriculum: p.curriculum.map((m, i) => i === modIdx ? { ...m, [field]: value } : m) }));
-  const handleCurriculumTopicChange = (modIdx, topicIdx, value) =>
-    setNewCourse(p => ({
-      ...p, curriculum: p.curriculum.map((m, i) => i === modIdx
-        ? { ...m, topics: m.topics.map((t, j) => j === topicIdx ? value : t) } : m)
-    }));
-  const addCurriculumModule = () =>
-    setNewCourse(p => ({ ...p, curriculum: [...p.curriculum, { module: "", topics: [""], duration: "" }] }));
-  const addCurriculumTopic = (modIdx) =>
-    setNewCourse(p => ({ ...p, curriculum: p.curriculum.map((m, i) => i === modIdx ? { ...m, topics: [...m.topics, ""] } : m) }));
-  const removeCurriculumModule = (index) =>
-    setNewCourse(p => ({ ...p, curriculum: p.curriculum.filter((_, i) => i !== index) }));
-  const removeCurriculumTopic = (modIdx, topicIdx) =>
-    setNewCourse(p => ({
-      ...p, curriculum: p.curriculum.map((m, i) => i === modIdx
-        ? { ...m, topics: m.topics.filter((_, j) => j !== topicIdx) } : m)
-    }));
-
-  const handleAddCourse = async () => {
-    if (!newCourse.name.trim()) return toast.error("Course name is required");
-    setLoading(true);
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete course?")) return;
     try {
-      const formData = new FormData();
-      Object.keys(newCourse).forEach((key) => {
-        if (Array.isArray(newCourse[key])) {
-          const filtered = key === "curriculum"
-            ? newCourse[key].filter(i => i.module.trim())
-            : newCourse[key].filter(i => i.trim());
-          formData.append(key, JSON.stringify(filtered));
-        } else formData.append(key, newCourse[key]);
-      });
-      if (selectedImage) formData.append("image", selectedImage);
-      const res = await fetch(`${API_BASE_URL}/courses/add`, {
-        method: "POST", headers: { Authorization: `Bearer ${token}` }, body: formData,
-      });
-      if (res.ok) { resetForm(); fetchCourses(); toast.success("Course added successfully"); }
-      else { const data = await res.json(); toast.error(data.msg || "Failed to add course"); }
-    } catch { toast.error("Error adding course"); }
-    finally { setLoading(false); }
+      await axios.delete(`/courses/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success("Course deleted");
+      fetchCourses();
+    } catch { toast.error("Failed to delete"); }
   };
 
-  const handleUpdateCourse = async () => {
-    if (!editingCourse?.name?.trim()) return toast.error("Course name is required");
-    setLoading(true);
-    try {
-      const formData = new FormData();
-      ["name","category","duration","fees","level","shortDescription","fullDescription"]
-        .forEach(key => formData.append(key, editingCourse[key] ?? ""));
-      const res = await fetch(`${API_BASE_URL}/courses/${editingCourse._id}`, {
-        method: "PUT", headers: { Authorization: `Bearer ${token}` }, body: formData,
+  const filtered = courses.filter(c => {
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.courseCode?.toLowerCase().includes(search.toLowerCase())) return false;
+    if (catFilter && c.category !== catFilter) return false;
+    if (statusFilter && c.status !== statusFilter) return false;
+    return true;
+  });
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? 16 : 24 }}>
+      {/* Filters */}
+      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 12, marginBottom: 20 }}>
+        <input type="text" placeholder="Search course name or code..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inp, flex: 1 }} />
+        <select value={catFilter} onChange={e => setCatFilter(e.target.value)} style={{ ...inp, width: isMobile ? "100%" : 200 }}>
+          <option value="">All Categories</option>
+          <option value="computerCourses">Computer Courses</option>
+          <option value="englishCourses">English Speaking</option>
+          <option value="distanceLearning">Distance Learning</option>
+        </select>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: isMobile ? "100%" : 150 }}>
+          <option value="">All Statuses</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+          <option value="Completed">Completed</option>
+        </select>
+      </div>
+
+      {/* Mobile: card list / Desktop: table */}
+      {isMobile ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {filtered.map(c => (
+            <div key={c._id} style={{ border: "1px solid #f1f5f9", borderRadius: 12, padding: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: "#1e293b" }}>{c.name}</div>
+                  <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{c.courseCode || "N/A"}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => { setEditingCourseId(c._id); setActiveSection("courses-add"); }} style={{ padding: 6, background: "none", border: "1px solid #e2e8f0", borderRadius: 8, color: "#64748b", cursor: "pointer" }}><Edit3 size={13} /></button>
+                  <button onClick={() => handleDelete(c._id)} style={{ padding: 6, background: "none", border: "1px solid #fee2e2", borderRadius: 8, color: "#ef4444", cursor: "pointer" }}><Trash2 size={13} /></button>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                <span style={{ background: "#eff6ff", color: "#2563eb", padding: "3px 8px", borderRadius: 6, fontSize: 10, textTransform: "uppercase", fontWeight: 700 }}>{c.category}</span>
+                <span style={{ background: c.status === "Active" ? "#dcfce7" : c.status === "Completed" ? "#dbeafe" : "#f1f5f9", color: c.status === "Active" ? "#16a34a" : c.status === "Completed" ? "#2563eb" : "#64748b", padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 800, textTransform: "uppercase" }}>{c.status || "Active"}</span>
+                {(c.durationMonths || c.duration) && <span style={{ background: "#f8fafc", color: "#475569", padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700 }}>{c.durationMonths ? `${c.durationMonths} Months` : c.duration}</span>}
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && <div style={{ padding: 40, textAlign: "center", fontSize: 12, color: "#94a3b8" }}>No courses found.</div>}
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 800 }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid #f1f5f9" }}>
+                {["Course / Code", "Category", "Duration", "Desc", "Status", "Actions"].map(h => (
+                  <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(c => (
+                <tr key={c._id} style={{ borderBottom: "1px solid #f1f5f9" }}
+                  onMouseOver={e => e.currentTarget.style.background = "#fafafa"}
+                  onMouseOut={e => e.currentTarget.style.background = "transparent"}
+                >
+                  <td style={{ padding: 16 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: "#1e293b" }}>{c.name}</div>
+                    <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{c.courseCode || "N/A"}</div>
+                  </td>
+                  <td style={{ padding: 16 }}>
+                    <span style={{ background: "#eff6ff", color: "#2563eb", padding: "4px 8px", borderRadius: 6, fontSize: 10, textTransform: "uppercase", fontWeight: 700 }}>{c.category}</span>
+                  </td>
+                  <td style={{ padding: 16, fontSize: 12, fontWeight: 600 }}>{c.durationMonths ? `${c.durationMonths} Months` : c.duration || "-"}</td>
+                  <td style={{ padding: 16, fontSize: 11, color: "#64748b", maxWidth: 200, WebkitLineClamp: 2, display: "-webkit-box", WebkitBoxOrient: "vertical", overflow: "hidden" }}>{c.shortDescription}</td>
+                  <td style={{ padding: 16 }}>
+                    <span style={{ background: c.status === "Active" ? "#dcfce7" : c.status === "Completed" ? "#dbeafe" : "#f1f5f9", color: c.status === "Active" ? "#16a34a" : c.status === "Completed" ? "#2563eb" : "#64748b", padding: "4px 8px", borderRadius: 6, fontSize: 10, fontWeight: 800, textTransform: "uppercase" }}>{c.status || "Active"}</span>
+                  </td>
+                  <td style={{ padding: 16 }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => { setEditingCourseId(c._id); setActiveSection("courses-add"); }} style={{ padding: 6, background: "none", border: "1px solid #e2e8f0", borderRadius: 8, color: "#64748b", cursor: "pointer" }}><Edit3 size={14} /></button>
+                      <button onClick={() => handleDelete(c._id)} style={{ padding: 6, background: "none", border: "1px solid #fee2e2", borderRadius: 8, color: "#ef4444", cursor: "pointer" }}><Trash2 size={14} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
+ * 2. ADD / EDIT COURSE
+ * ───────────────────────────────────────────────────── */
+function AddCourse({ token, editingId, setEditingId, setActiveSection }) {
+  const width = useWindowWidth();
+  const isMobile = width < 640;
+
+  const [form, setForm] = useState({
+    name: "", courseCode: "", category: "computerCourses", durationMonths: "",
+    totalFee: "", feeType: "Monthly", defaultInstallments: 3, level: "Beginner", status: "Active",
+    shortDescription: "", fullDescription: "", subjects: [],
+    learningOutcomes: [], whyThisCourse: [], prerequisites: [], toolsUsed: [], careerOpportunities: [], curriculum: []
+  });
+  const [image, setImage] = useState(null);
+  const [subjectsList, setSubjectsList] = useState([]);
+
+  useEffect(() => {
+    axios.get("/subjects", { headers: { Authorization: `Bearer ${token}` } }).then(res => setSubjectsList(res.data)).catch(console.error);
+    if (editingId) {
+      axios.get(`/courses/${editingId}`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(res => {
+          const c = res.data;
+          const parseArr = v => Array.isArray(v) ? v : (typeof v === 'string' ? JSON.parse(v) : []);
+          setForm({
+            name: c.name || "", courseCode: c.courseCode || "", category: c.category || "computerCourses",
+            durationMonths: c.durationMonths || "", totalFee: c.totalFee || "", feeType: c.feeType || "Monthly",
+            defaultInstallments: c.defaultInstallments || 3,
+            level: c.level || "Beginner", status: c.status || "Active", shortDescription: c.shortDescription || "",
+            fullDescription: c.fullDescription || "", subjects: c.subjects || [],
+            learningOutcomes: parseArr(c.learningOutcomes), whyThisCourse: parseArr(c.whyThisCourse),
+            prerequisites: parseArr(c.prerequisites), toolsUsed: parseArr(c.toolsUsed),
+            careerOpportunities: parseArr(c.careerOpportunities), curriculum: parseArr(c.curriculum),
+          });
+        })
+        .catch(() => toast.error("Failed to fetch course details"));
+    } else {
+      setForm({
+        name: "", courseCode: "", category: "computerCourses", durationMonths: "",
+        totalFee: "", feeType: "Monthly", defaultInstallments: 3, level: "Beginner", status: "Active",
+        shortDescription: "", fullDescription: "", subjects: [],
+        learningOutcomes: [], whyThisCourse: [], prerequisites: [], toolsUsed: [], careerOpportunities: [], curriculum: []
       });
-      if (res.ok) { toast.success("Course updated"); setEditingCourse(null); fetchCourses(); }
-      else toast.error("Failed to update course");
-    } catch { toast.error("Error updating course"); }
-    finally { setLoading(false); }
+    }
+  }, [editingId, token]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name) return toast.error("Name is required");
+    try {
+      const fd = new FormData();
+      const arrFields = ["subjects", "learningOutcomes", "whyThisCourse", "prerequisites", "toolsUsed", "careerOpportunities", "curriculum"];
+      Object.entries(form).forEach(([k, v]) => fd.append(k, arrFields.includes(k) ? JSON.stringify(v) : v));
+      if (image) fd.append("image", image);
+      if (editingId) {
+        await axios.put(`/courses/${editingId}`, fd, { headers: { Authorization: `Bearer ${token}` } });
+        toast.success("Course updated successfully");
+      } else {
+        await axios.post("/courses/add", fd, { headers: { Authorization: `Bearer ${token}` } });
+        toast.success("Course added successfully");
+      }
+      setEditingId(null);
+      if (setActiveSection) setActiveSection("courses-all");
+    } catch (err) { toast.error(err.response?.data?.msg || "Error saving course"); }
+  };
+
+  const toggleSubject = (id) => setForm(p => ({
+    ...p, subjects: p.subjects.includes(id) ? p.subjects.filter(x => x !== id) : [...p.subjects, id]
+  }));
+
+  return (
+    <form onSubmit={handleSubmit} style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? 18 : 32, display: "grid", gap: 20 }}>
+
+      {/* Basic fields grid */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 18 }}>
+        <div><label style={lbl}>Course Name *</label><input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inp} /></div>
+        <div><label style={lbl}>Course Code</label><input value={form.courseCode} onChange={e => setForm({ ...form, courseCode: e.target.value })} style={inp} /></div>
+        <div><label style={lbl}>Category</label><select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={inp}><option value="computerCourses">Computer Courses</option><option value="englishCourses">English Speaking</option><option value="distanceLearning">Distance Learning</option></select></div>
+        <div><label style={lbl}>Fee Type</label><select value={form.feeType} onChange={e => setForm({ ...form, feeType: e.target.value })} style={inp}><option value="Monthly">Monthly Installments</option><option value="Fixed">Fixed / Lump Sum</option></select></div>
+        <div><label style={lbl}>Total Fees (₹)</label><input type="number" value={form.totalFee} onChange={e => setForm({ ...form, totalFee: e.target.value })} style={inp} /></div>
+        {form.feeType === "Monthly" ? (
+          <div><label style={lbl}>Duration (Months)</label><input type="number" value={form.durationMonths} onChange={e => setForm({ ...form, durationMonths: e.target.value })} style={inp} /></div>
+        ) : (
+          <div><label style={lbl}>Default Installments</label><input type="number" value={form.defaultInstallments} onChange={e => setForm({ ...form, defaultInstallments: e.target.value })} style={inp} /></div>
+        )}
+        <div><label style={lbl}>Difficulty Level</label><select value={form.level} onChange={e => setForm({ ...form, level: e.target.value })} style={inp}><option value="Beginner">Beginner</option><option value="Intermediate">Intermediate</option><option value="Advanced">Advanced</option></select></div>
+        <div><label style={lbl}>Status</label><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} style={inp}><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
+      </div>
+
+      <div><label style={lbl}>Short Description</label><input value={form.shortDescription} onChange={e => setForm({ ...form, shortDescription: e.target.value })} style={inp} /></div>
+      <div><label style={lbl}>Course Image</label><input type="file" onChange={e => setImage(e.target.files[0])} style={{ ...inp, cursor: "pointer" }} /></div>
+
+      {/* Dynamic arrays grid */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 18 }}>
+        <DynamicList label="What Students Will Learn" items={form.learningOutcomes} onChange={v => setForm({ ...form, learningOutcomes: v })} placeholder="e.g. Build full-stack web apps" />
+        <DynamicList label="Why This Course?" items={form.whyThisCourse} onChange={v => setForm({ ...form, whyThisCourse: v })} placeholder="e.g. Highest placement rate" />
+        <DynamicList label="Prerequisites" items={form.prerequisites} onChange={v => setForm({ ...form, prerequisites: v })} placeholder="e.g. Basic understanding of HTML" />
+        <DynamicList label="Tools Used" items={form.toolsUsed} onChange={v => setForm({ ...form, toolsUsed: v })} placeholder="e.g. React, Node.js" />
+      </div>
+
+      <DynamicList label="Career Opportunities" items={form.careerOpportunities} onChange={v => setForm({ ...form, careerOpportunities: v })} placeholder="e.g. Software Engineer" />
+      <CurriculumBuilder curriculum={form.curriculum} onChange={v => setForm({ ...form, curriculum: v })} />
+
+      {/* Subjects */}
+      <div>
+        <label style={lbl}>Included Subjects</label>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: 16, background: "#f8fafc", borderRadius: 10, border: "1px solid #e2e8f0" }}>
+          {subjectsList.length === 0 && <span style={{ fontSize: 12, color: "#94a3b8" }}>No subjects found. Create subjects first.</span>}
+          {subjectsList.map(s => (
+            <label key={s._id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, padding: "6px 12px", background: form.subjects.includes(s._id) ? "#dbeafe" : "#fff", border: `1px solid ${form.subjects.includes(s._id) ? "#3b82f6" : "#cbd5e1"}`, borderRadius: 8, cursor: "pointer", color: form.subjects.includes(s._id) ? "#1d4ed8" : "#475569" }}>
+              <input type="checkbox" checked={form.subjects.includes(s._id)} onChange={() => toggleSubject(s._id)} style={{ margin: 0 }} />
+              {s.name} ({s.code})
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, flexDirection: isMobile ? "column" : "row" }}>
+        {editingId && (
+          <button type="button" onClick={() => { setEditingId(null); setActiveSection("courses-all"); }} style={{ ...btnPrimary, background: "#f1f5f9", color: "#475569", width: isMobile ? "100%" : "auto", justifyContent: "center" }}>Cancel</button>
+        )}
+        <button type="submit" style={{ ...btnPrimary, width: isMobile ? "100%" : "auto", justifyContent: "center" }}><FilePlus2 size={16} /> {editingId ? "Update Course" : "Save Course"}</button>
+      </div>
+    </form>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
+ * 3. SUBJECTS
+ * ───────────────────────────────────────────────────── */
+function Subjects({ token }) {
+  const [subjects, setSubjects] = useState([]);
+  const [form, setForm] = useState({ name: "", code: "", category: "computerCourses" });
+
+  const width = useWindowWidth();
+  const isMobile = width < 640;
+
+  const fetchSubs = () => axios.get("/subjects", { headers: { Authorization: `Bearer ${token}` } }).then(res => setSubjects(res.data)).catch(console.error);
+  useEffect(() => { fetchSubs(); }, []);
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post("/subjects/add", form, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success("Subject added");
+      setForm({ name: "", code: "", category: "computerCourses" });
+      fetchSubs();
+    } catch { toast.error("Error adding subject"); }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this course?")) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/courses/${id}`, {
-        method: "DELETE", headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) { toast.success("Course deleted"); fetchCourses(); }
-    } catch { toast.error("Error deleting course"); }
+    if (!window.confirm("Delete subject?")) return;
+    await axios.delete(`/subjects/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+    fetchSubs();
   };
-
-  const resetForm = () => { setNewCourse(INITIAL_COURSE); setSelectedImage(null); setShowAdvanced(false); };
-
-  const CAT_LABEL = {
-    computerCourses: "Computer Courses",
-    englishCourses: "English Courses",
-    distanceLearning: "Distance Learning",
-  };
-
-  const ADVANCED_SECTIONS = [
-    { field: "learningOutcomes", label: "What Students Will Learn", icon: Award, color: "#f59e0b", placeholder: "e.g. Master web development..." },
-    { field: "whyThisCourse", label: "Course Benefits", icon: Activity, color: "#10b981", placeholder: "e.g. Industrial training..." },
-    { field: "prerequisites", label: "Course Requirements", icon: Layers, color: "#6366f1", placeholder: "e.g. Basic knowledge..." },
-    { field: "careerOpportunities", label: "Career Paths", icon: GraduationCap, color: "#3b82f6", placeholder: "e.g. Web Developer..." },
-  ];
-
-  /* ── Shared style tokens ── */
-  const inp = {
-    width: "100%", background: "#f8fafc", border: "1px solid #e2e8f0",
-    borderRadius: 12, padding: "10px 16px", fontSize: 13, fontWeight: 600,
-    color: "#334155", outline: "none", boxSizing: "border-box", fontFamily: "inherit",
-  };
-  const lbl = {
-    display: "block", fontSize: 10, fontWeight: 700, color: "#94a3b8",
-    textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6,
-  };
-  const card = {
-    background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, overflow: "hidden",
-  };
-  const pad = isMobile ? 16 : isDesktop ? 32 : 24;
-
-  /* ── Responsive grid via inline styles ── */
-  const g2 = { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 16 : 20 };
-  const g3 = { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: isMobile ? 16 : 20 };
-  const g4 = { display: "grid", gridTemplateColumns: isMobile ? "1fr" : isDesktop ? "1fr 1fr 1fr 1fr" : "1fr 1fr", gap: 16 };
 
   return (
-    <div style={{ paddingBottom: 48, fontFamily: "sans-serif" }}>
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr", gap: 24, alignItems: "start" }}>
+      <form onSubmit={handleAdd} style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? 18 : 24, display: "grid", gap: 16 }}>
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800 }}>Add New Subject</h3>
+        <div><label style={lbl}>Name</label><input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inp} placeholder="MS Word" /></div>
+        <div><label style={lbl}>Code</label><input required value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} style={inp} placeholder="MSW" /></div>
+        <div><label style={lbl}>Category</label><select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={inp}><option value="computerCourses">Computer Courses</option><option value="englishCourses">English</option><option value="other">Other</option></select></div>
+        <button type="submit" style={{ ...btnPrimary, width: "100%", justifyContent: "center" }}><Plus size={16} /> Add Subject</button>
+      </form>
 
-      {/* ── HEADER ── */}
-      <div style={{
-        display: "flex", flexDirection: isMobile ? "column" : "row",
-        justifyContent: "space-between", alignItems: isMobile ? "flex-start" : "center",
-        gap: 16, background: "#fff", padding: isMobile ? 16 : 20,
-        borderRadius: 16, border: "1px solid #e2e8f0",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 24,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 12, background: "#0f172a", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
-            <Layers size={22} />
-          </div>
-          <div>
-            <h1 style={{ margin: 0, fontSize: isMobile ? 17 : 22, fontWeight: 900, color: "#1e293b", textTransform: "uppercase", letterSpacing: "-0.02em" }}>
-              Course Management
-            </h1>
-            <p style={{ margin: "5px 0 0", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em", display: "flex", alignItems: "center", gap: 5 }}>
-              <Activity size={10} color="#3b82f6" /> Manage Your Courses
-            </p>
-          </div>
+      <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: isMobile ? 0 : 400 }}>
+            <thead>
+              <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+                <th style={{ padding: 16, textAlign: "left", fontSize: 11, color: "#64748b" }}>Code</th>
+                <th style={{ padding: 16, textAlign: "left", fontSize: 11, color: "#64748b" }}>Name</th>
+                {!isMobile && <th style={{ padding: 16, textAlign: "left", fontSize: 11, color: "#64748b" }}>Category</th>}
+                <th style={{ padding: 16, textAlign: "right" }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {subjects.map(s => (
+                <tr key={s._id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                  <td style={{ padding: 16, fontWeight: 800, fontSize: 12 }}>{s.code}</td>
+                  <td style={{ padding: 16, fontWeight: 600, fontSize: 13 }}>{s.name}</td>
+                  {!isMobile && <td style={{ padding: 16, fontSize: 11 }}><span style={{ background: "#eff6ff", color: "#2563eb", padding: "4px 8px", borderRadius: 6, fontWeight: 700 }}>{s.category}</span></td>}
+                  <td style={{ padding: 16, textAlign: "right" }}>
+                    <button onClick={() => handleDelete(s._id)} style={{ padding: 6, background: "none", border: "1px solid #fee2e2", borderRadius: 8, color: "#ef4444", cursor: "pointer" }}><Trash2 size={14} /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 28,
-          borderTop: isMobile ? "1px solid #f1f5f9" : "none",
-          borderLeft: isMobile ? "none" : "1px solid #f1f5f9",
-          paddingTop: isMobile ? 12 : 0, paddingLeft: isMobile ? 0 : 28,
-          marginTop: isMobile ? 4 : 0,
-        }}>
-          <div style={{ textAlign: "center" }}>
-            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Live Courses</p>
-            <p style={{ margin: "4px 0 0", fontSize: 22, fontWeight: 900, color: "#0f172a" }}>{courses.length}</p>
-          </div>
-          <div style={{ width: 1, height: 28, background: "#f1f5f9" }} />
-          <div style={{ textAlign: "center" }}>
-            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>Status</p>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#10b981", fontWeight: 700, fontSize: 12, marginTop: 4 }}>
-              <CheckCircle size={12} /> Active
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
+ * 4. STUDY MATERIALS
+ * ───────────────────────────────────────────────────── */
+function StudyMaterials({ token }) {
+  const [materials, setMaterials] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [form, setForm] = useState({ title: "", subjectId: "", materialType: "Theoretical" });
+  const [file, setFile] = useState(null);
+
+  const width = useWindowWidth();
+  const isMobile = width < 640;
+
+  const fetchAll = () => {
+    axios.get("/study-materials", { headers: { Authorization: `Bearer ${token}` } }).then(res => setMaterials(res.data));
+    axios.get("/subjects", { headers: { Authorization: `Bearer ${token}` } }).then(res => setSubjects(res.data));
+  };
+  useEffect(() => { fetchAll(); }, []);
+
+  const handleUpload = async (e) => {
+    e.preventDefault();
+    if (!file) return toast.error("File required");
+    const fd = new FormData();
+    Object.entries(form).forEach(([k, v]) => fd.append(k, v));
+    fd.append("file", file);
+    try {
+      await axios.post("/study-materials/upload", fd, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success("Uploaded!");
+      setForm({ ...form, title: "" });
+      setFile(null);
+      document.getElementById("mat-file").value = "";
+      fetchAll();
+    } catch { toast.error("Upload failed"); }
+  };
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr", gap: 24, alignItems: "start" }}>
+      <form onSubmit={handleUpload} style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? 18 : 24, display: "grid", gap: 16 }}>
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800 }}>Upload Material</h3>
+        <div><label style={lbl}>Subject</label><select required value={form.subjectId} onChange={e => setForm({ ...form, subjectId: e.target.value })} style={inp}><option value="">Select...</option>{subjects.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}</select></div>
+        <div><label style={lbl}>Type</label><select value={form.materialType} onChange={e => setForm({ ...form, materialType: e.target.value })} style={inp}><option value="Theoretical">Theoretical (Notes)</option><option value="Practical">Practical (Guides)</option></select></div>
+        <div><label style={lbl}>Title</label><input required value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} style={inp} placeholder="C++ Chapter 1" /></div>
+        <div><label style={lbl}>File (PDF, DOC)</label><input type="file" id="mat-file" required onChange={e => setFile(e.target.files[0])} style={inp} /></div>
+        <button type="submit" style={{ ...btnPrimary, width: "100%", justifyContent: "center" }}><Upload size={16} /> Upload to Portal</button>
+      </form>
+
+      <div style={{ display: "grid", gap: 12 }}>
+        {materials.map(m => (
+          <div key={m._id} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", padding: isMobile ? 12 : 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
+              <div style={{ background: "#eff6ff", color: "#2563eb", padding: 10, borderRadius: 10, flexShrink: 0 }}><File size={18} /></div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 13, color: "#1e293b", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {m.title} <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8" }}>v{m.version}</span>
+                </div>
+                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                  <span style={{ background: "#f8fafc", padding: "2px 6px", borderRadius: 4 }}>{m.subjectId?.name || "Unknown"}</span>
+                  <span style={{ background: m.materialType === "Practical" ? "#fef2f2" : "#ecfdf5", color: m.materialType === "Practical" ? "#ef4444" : "#10b981", padding: "2px 6px", borderRadius: 4 }}>{m.materialType}</span>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+              {m.fileUrl && <a href={m.fileUrl} target="_blank" rel="noreferrer" style={{ padding: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, color: "#475569", display: "flex" }}><FileDown size={14} /></a>}
+              <button onClick={async () => { if (window.confirm("Delete?")) { await axios.delete(`/study-materials/${m._id}`, { headers: { Authorization: `Bearer ${token}` } }); fetchAll(); } }} style={{ padding: 8, background: "none", border: "1px solid #fee2e2", borderRadius: 8, color: "#ef4444", cursor: "pointer" }}><Trash2 size={14} /></button>
             </div>
           </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────
+ * MAIN WRAPPER
+ * ───────────────────────────────────────────────────── */
+export default function CourseDetails({ token, activeSection = "courses-all", setActiveSection }) {
+  const [editingCourseId, setEditingCourseId] = useState(null);
+
+  const width = useWindowWidth();
+  const isMobile = width < 640;
+
+  useEffect(() => {
+    if (activeSection !== "courses-add") setEditingCourseId(null);
+  }, [activeSection]);
+
+  const headerMap = {
+    "courses-all":      { t: "All Courses",        sub: "Manage active courses",      icon: Database },
+    "courses-add":      { t: "Add / Edit Course",   sub: "Create a new curriculum",    icon: FilePlus2 },
+    "courses-subjects": { t: "Subjects Database",   sub: "Manage module subjects",     icon: BookMarked },
+    "courses-materials":{ t: "Study Materials",     sub: "Upload student resources",   icon: FileText },
+    "courses":          { t: "All Courses",          sub: "Manage active courses",      icon: Database },
+  };
+
+  const current = headerMap[activeSection] || headerMap["courses-all"];
+  const Icon = current.icon;
+
+  return (
+    <div style={{ fontFamily: "inherit" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, background: "#fff", padding: isMobile ? "16px 18px" : "22px 32px", borderRadius: 20, border: "1px solid #e2e8f0", boxShadow: "0 4px 20px rgba(0,0,0,0.03)", marginBottom: 22 }}>
+        <div style={{ padding: isMobile ? 10 : 14, background: "#0f172a", color: "#fff", borderRadius: 14, flexShrink: 0 }}>
+          <Icon size={isMobile ? 20 : 24} />
+        </div>
+        <div>
+          <h1 style={{ margin: 0, fontSize: isMobile ? 18 : 24, fontWeight: 900, color: "#1e293b", letterSpacing: "-0.02em" }}>{current.t}</h1>
+          <p style={{ margin: "4px 0 0", fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em" }}>{current.sub}</p>
         </div>
       </div>
 
-      {/* ── ADD NEW COURSE ── */}
-      {!editingCourse && (
-        <div style={{ ...card, marginBottom: 32 }}>
-          <div style={{ padding: isMobile ? "12px 16px" : "14px 24px", borderBottom: "1px solid #f1f5f9", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <h2 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: 10 }}>
-              <FilePlus size={16} color="#2563eb" /> Add New Course
-            </h2>
-            {!isMobile && <span style={{ fontSize: 10, fontWeight: 700, color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.08em" }}>ID: {Math.random().toString(16).slice(2, 10).toUpperCase()}</span>}
-          </div>
-
-          <div style={{ padding: pad }}>
-
-            {/* Name + Category + Image */}
-            <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 16 : 24, marginBottom: 20 }}>
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
-                <div style={g2}>
-                  <div>
-                    <label style={lbl}>Course Name *</label>
-                    <input type="text" value={newCourse.name}
-                      onChange={e => setNewCourse({ ...newCourse, name: e.target.value })}
-                      placeholder="e.g. Graphic Design Masterclass" style={inp} />
-                  </div>
-                  <div>
-                    <label style={lbl}>Category</label>
-                    <select value={newCourse.category}
-                      onChange={e => setNewCourse({ ...newCourse, category: e.target.value })} style={inp}>
-                      <option value="computerCourses">Computer Courses</option>
-                      <option value="englishCourses">English Speaking</option>
-                      <option value="distanceLearning">Distance Learning</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label style={lbl}>Short Description</label>
-                  <textarea value={newCourse.shortDescription}
-                    onChange={e => setNewCourse({ ...newCourse, shortDescription: e.target.value })}
-                    placeholder="Brief course summary..."
-                    style={{ ...inp, minHeight: 80, resize: "vertical", fontWeight: 500 }} />
-                </div>
-              </div>
-              {/* Image upload */}
-              <div style={{ width: isMobile ? "100%" : isDesktop ? 190 : 150, flexShrink: 0 }}>
-                <label style={lbl}>Course Image</label>
-                <div style={{ position: "relative", border: "2px dashed #e2e8f0", borderRadius: 14, background: "#f8fafc", minHeight: isMobile ? 90 : 158, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 16 }}>
-                  <input type="file" accept="image/*" onChange={e => setSelectedImage(e.target.files[0])}
-                    style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", zIndex: 10 }} />
-                  {selectedImage ? (
-                    <div style={{ textAlign: "center" }}>
-                      <CheckCircle size={28} color="#10b981" style={{ margin: "0 auto 8px" }} />
-                      <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em", wordBreak: "break-all" }}>
-                        {selectedImage.name.slice(0, 18)}...
-                      </p>
-                    </div>
-                  ) : (
-                    <div style={{ textAlign: "center", opacity: 0.45 }}>
-                      <ImageIcon size={28} color="#94a3b8" style={{ margin: "0 auto 8px" }} />
-                      <p style={{ margin: 0, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b" }}>Upload Image</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Duration + Fees + Level */}
-            <div style={{ ...g3, marginBottom: 20 }}>
-              <div>
-                <label style={lbl}>Duration</label>
-                <div style={{ position: "relative" }}>
-                  <Clock size={14} color="#94a3b8" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
-                  <input type="text" value={newCourse.duration}
-                    onChange={e => setNewCourse({ ...newCourse, duration: e.target.value })}
-                    placeholder="e.g. 3 Months" style={{ ...inp, paddingLeft: 34 }} />
-                </div>
-              </div>
-              <div>
-                <label style={lbl}>Course Fees</label>
-                <div style={{ position: "relative" }}>
-                  <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", fontWeight: 700, color: "#94a3b8", fontSize: 13 }}>₹</span>
-                  <input type="number" value={newCourse.fees}
-                    onChange={e => setNewCourse({ ...newCourse, fees: e.target.value })}
-                    style={{ ...inp, paddingLeft: 28, color: "#2563eb", fontWeight: 900 }} />
-                </div>
-              </div>
-              <div>
-                <label style={lbl}>Difficulty Level</label>
-                <select value={newCourse.level}
-                  onChange={e => setNewCourse({ ...newCourse, level: e.target.value })} style={inp}>
-                  <option value="Beginner">Beginner</option>
-                  <option value="Intermediate">Intermediate</option>
-                  <option value="Advanced">Advanced</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Full Description */}
-            <div style={{ marginBottom: 20 }}>
-              <label style={lbl}>Full Description</label>
-              <textarea value={newCourse.fullDescription}
-                onChange={e => setNewCourse({ ...newCourse, fullDescription: e.target.value })}
-                placeholder="Detailed course description..."
-                style={{ ...inp, minHeight: 120, resize: "vertical", fontWeight: 500 }} />
-            </div>
-
-            {/* Toggle */}
-            <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 20, display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "center", justifyContent: "flex-end", gap: 14 }}>
-              <button type="button" onClick={() => setShowAdvanced(!showAdvanced)}
-                style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", borderRadius: 12, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", cursor: "pointer", border: "none", background: showAdvanced ? "#0f172a" : "#f1f5f9", color: showAdvanced ? "#fff" : "#475569", width: isMobile ? "100%" : "auto", justifyContent: "center" }}>
-                {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                {showAdvanced ? "Hide Extra Details" : "Show Extra Details"}
-              </button>
-            </div>
-
-            {/* ── Advanced ── */}
-            {showAdvanced && (
-              <div style={{ borderTop: "1px solid #f1f5f9", marginTop: 24, paddingTop: 28 }}>
-
-                {ADVANCED_SECTIONS.map(section => (
-                  <div key={section.field} style={{ marginBottom: 32 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: 8, marginBottom: 14 }}>
-                      <h3 style={{ margin: 0, fontSize: 11, fontWeight: 900, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: 7 }}>
-                        <section.icon size={13} color={section.color} /> {section.label}
-                      </h3>
-                      <button type="button" onClick={() => addArrayItem(section.field)}
-                        style={{ padding: "4px 14px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 10, fontWeight: 700, color: "#475569", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                        + Add
-                      </button>
-                    </div>
-                    <div style={g2}>
-                      {newCourse[section.field].map((item, index) => (
-                        <div key={index} style={{ display: "flex", gap: 8 }}>
-                          <input type="text" value={item}
-                            onChange={e => handleArrayChange(section.field, index, e.target.value)}
-                            placeholder={section.placeholder}
-                            style={{ ...inp, flex: 1 }} />
-                          <button type="button" onClick={() => removeArrayItem(section.field, index)}
-                            style={{ padding: "0 10px", background: "#fff", border: "1px solid #fee2e2", borderRadius: 10, color: "#fca5a5", cursor: "pointer", flexShrink: 0 }}>
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-
-                {/* Tools */}
-                <div style={{ marginBottom: 32 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9", paddingBottom: 8, marginBottom: 14 }}>
-                    <h3 style={{ margin: 0, fontSize: 11, fontWeight: 900, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: 7 }}>
-                      <Settings size={13} color="#94a3b8" /> Software & Tools Used
-                    </h3>
-                    <button type="button" onClick={() => addArrayItem("toolsUsed")}
-                      style={{ padding: "4px 14px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 10, fontWeight: 700, color: "#475569", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      + Add Tool
-                    </button>
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                    {newCourse.toolsUsed.map((tool, index) => (
-                      <div key={index} style={{ display: "flex", alignItems: "center", gap: 8, background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 999, paddingLeft: 14, paddingRight: 6, paddingTop: 4, paddingBottom: 4 }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#475569" }}>{tool || "Info"}</span>
-                        <button onClick={() => removeArrayItem("toolsUsed", index)}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", padding: 2, display: "flex" }}>
-                          <XCircle size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <input type="text" placeholder="Type a tool name and press Enter..."
-                    style={{ ...inp, fontSize: 11 }}
-                    onKeyDown={e => { if (e.key === "Enter") { addArrayItem("toolsUsed"); e.target.value = ""; } }} />
-                </div>
-
-                {/* Curriculum */}
-                <div>
-                  <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "center", justifyContent: "space-between", gap: 12, borderBottom: "2px solid #0f172a", paddingBottom: 12, marginBottom: 20 }}>
-                    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 900, color: "#0f172a", textTransform: "uppercase", letterSpacing: "0.06em", display: "flex", alignItems: "center", gap: 10 }}>
-                      <Layers size={18} color="#2563eb" /> Course Syllabus
-                    </h3>
-                    <button type="button" onClick={addCurriculumModule}
-                      style={{ padding: "10px 20px", background: "#0f172a", color: "#fff", border: "none", borderRadius: 12, fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, width: isMobile ? "100%" : "auto", justifyContent: "center" }}>
-                      <Plus size={13} /> Add Module
-                    </button>
-                  </div>
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                    {newCourse.curriculum.map((mod, modIdx) => (
-                      <div key={modIdx} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 16, padding: isMobile ? 14 : 22, position: "relative" }}>
-                        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 14, marginBottom: 16 }}>
-                          <div style={{ flex: 1 }}>
-                            <label style={lbl}>Module Name</label>
-                            <input type="text" value={mod.module}
-                              onChange={e => handleCurriculumChange(modIdx, "module", e.target.value)}
-                              placeholder="e.g. Fundamental Logic Gates" style={inp} />
-                          </div>
-                          <div style={{ width: isMobile ? "100%" : 170 }}>
-                            <label style={lbl}>Time Required</label>
-                            <div style={{ position: "relative" }}>
-                              <Clock size={14} color="#94a3b8" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
-                              <input type="text" value={mod.duration}
-                                onChange={e => handleCurriculumChange(modIdx, "duration", e.target.value)}
-                                placeholder="48 Hours" style={{ ...inp, paddingLeft: 34 }} />
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{ background: "#f8fafc", borderRadius: 8, padding: "8px 14px", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                          <span style={{ fontSize: 10, fontWeight: 900, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: 5 }}>
-                            <ChevronRight size={13} color="#3b82f6" /> Topics
-                          </span>
-                          <button type="button" onClick={() => addCurriculumTopic(modIdx)}
-                            style={{ fontSize: 10, fontWeight: 900, color: "#2563eb", background: "#fff", border: "1px solid #bfdbfe", borderRadius: 6, padding: "4px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-                            <Plus size={11} /> Add Topic
-                          </button>
-                        </div>
-                        <div style={g2}>
-                          {mod.topics.map((topic, topicIdx) => (
-                            <div key={topicIdx} style={{ display: "flex", gap: 8 }}>
-                              <input type="text" value={topic}
-                                onChange={e => handleCurriculumTopicChange(modIdx, topicIdx, e.target.value)}
-                                placeholder="Enter topic..."
-                                style={{ ...inp, flex: 1, fontSize: 12, fontWeight: 500 }} />
-                              <button type="button" onClick={() => removeCurriculumTopic(modIdx, topicIdx)}
-                                style={{ padding: "0 10px", background: "#fff", border: "1px solid #fee2e2", borderRadius: 10, color: "#fca5a5", cursor: "pointer", flexShrink: 0 }}>
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                        <button type="button" onClick={() => removeCurriculumModule(modIdx)}
-                          style={{ position: "absolute", top: -12, right: -12, width: 28, height: 28, borderRadius: "50%", background: "#fff", border: "1px solid #f1f5f9", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", cursor: "pointer" }}>
-                          <XCircle size={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Submit */}
-            <div style={{ borderTop: "1px solid #f1f5f9", marginTop: 28, paddingTop: 22, display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "flex-end", gap: 12 }}>
-              <button type="button" onClick={resetForm}
-                style={{ padding: "12px 28px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, fontSize: 11, fontWeight: 900, color: "#94a3b8", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.08em", width: isMobile ? "100%" : "auto" }}>
-                Clear Form
-              </button>
-              <button onClick={handleAddCourse} disabled={loading}
-                style={{ padding: "12px 36px", background: "#0f172a", color: "#fff", border: "none", borderRadius: 12, fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.08em", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, opacity: loading ? 0.5 : 1, boxShadow: "0 6px 20px rgba(15,23,42,0.14)", width: isMobile ? "100%" : "auto" }}>
-                {loading ? <Loader2 size={17} style={{ animation: "spin 1s linear infinite" }} /> : <Database size={17} />}
-                Save Course
-              </button>
-            </div>
-          </div>
-        </div>
+      {(activeSection === "courses-all" || activeSection === "courses") && (
+        <AllCourses token={token} setActiveSection={setActiveSection} setEditingCourseId={setEditingCourseId} />
       )}
-
-      {/* ── EXISTING COURSES ── */}
-      <div>
-        <h3 style={{ margin: "0 0 14px", fontSize: 13, fontWeight: 700, color: "#0f172a", textTransform: "uppercase", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: 8 }}>
-          <Database size={14} color="#3b82f6" /> Existing Courses
-        </h3>
-
-        {loading && courses.length === 0 ? (
-          <div style={{ padding: 48, textAlign: "center" }}>
-            <Loader2 size={24} color="#e2e8f0" style={{ animation: "spin 1s linear infinite" }} />
-          </div>
-        ) : courses.length === 0 ? (
-          <div style={{ padding: "60px 24px", textAlign: "center", background: "#f8fafc", borderRadius: 16, border: "2px dashed #e2e8f0" }}>
-            <BookOpen size={32} color="#e2e8f0" style={{ margin: "0 auto 10px" }} />
-            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>No courses found. Add one above.</p>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {courses.map(course => (
-              <div key={course._id} style={card}>
-                {editingCourse && editingCourse._id === course._id ? (
-                  <div style={{ padding: isMobile ? 14 : 22 }}>
-                    <h4 style={{ margin: "0 0 14px", fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      Editing: {course.name}
-                    </h4>
-                    <div style={g4}>
-                      {[
-                        { key: "name", label: "Name", type: "text" },
-                        { key: "duration", label: "Duration", type: "text" },
-                        { key: "fees", label: "Fees (₹)", type: "number" },
-                      ].map(f => (
-                        <div key={f.key}>
-                          <label style={lbl}>{f.label}</label>
-                          <input type={f.type} value={editingCourse[f.key] || ""}
-                            onChange={e => setEditingCourse({ ...editingCourse, [f.key]: e.target.value })}
-                            style={{ ...inp, fontSize: 12 }} />
-                        </div>
-                      ))}
-                      <div>
-                        <label style={lbl}>Category</label>
-                        <select value={editingCourse.category}
-                          onChange={e => setEditingCourse({ ...editingCourse, category: e.target.value })}
-                          style={{ ...inp, fontSize: 12 }}>
-                          <option value="computerCourses">Computer Courses</option>
-                          <option value="englishCourses">English Courses</option>
-                          <option value="distanceLearning">Distance Learning</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label style={lbl}>Level</label>
-                        <select value={editingCourse.level || "Beginner"}
-                          onChange={e => setEditingCourse({ ...editingCourse, level: e.target.value })}
-                          style={{ ...inp, fontSize: 12 }}>
-                          <option value="Beginner">Beginner</option>
-                          <option value="Intermediate">Intermediate</option>
-                          <option value="Advanced">Advanced</option>
-                        </select>
-                      </div>
-                      <div style={{ gridColumn: isMobile ? "1" : isDesktop ? "span 2" : "span 2" }}>
-                        <label style={lbl}>Short Description</label>
-                        <input type="text" value={editingCourse.shortDescription || ""}
-                          onChange={e => setEditingCourse({ ...editingCourse, shortDescription: e.target.value })}
-                          style={{ ...inp, fontSize: 12 }} />
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "flex-end", gap: 10, marginTop: 18, paddingTop: 14, borderTop: "1px solid #f1f5f9" }}>
-                      <button onClick={() => setEditingCourse(null)}
-                        style={{ padding: "8px 20px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, fontSize: 12, fontWeight: 700, color: "#64748b", cursor: "pointer", width: isMobile ? "100%" : "auto" }}>
-                        Cancel
-                      </button>
-                      <button onClick={handleUpdateCourse} disabled={loading}
-                        style={{ padding: "8px 24px", background: "#059669", color: "#fff", border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, opacity: loading ? 0.5 : 1, width: isMobile ? "100%" : "auto" }}>
-                        {loading && <Loader2 size={13} />} Save Changes
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ padding: isMobile ? 14 : 18, display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "center", gap: 14 }}>
-                    <div style={{ width: 50, height: 50, background: "#f8fafc", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", color: "#cbd5e1", overflow: "hidden", flexShrink: 0 }}>
-                      {course.image
-                        ? <img src={course.image.startsWith('http') ? course.image : `${API_BASE_URL.replace("/api", "")}${course.image}`} alt={course.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : <BookOpen size={20} />}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 5 }}>
-                        <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.02em" }}>{course.name}</h4>
-                      </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {[
-                          { text: CAT_LABEL[course.category] || course.category, color: "#2563eb", bg: "#eff6ff" },
-                          { text: course.level, color: "#64748b", bg: "#f8fafc" },
-                          { text: `⏱ ${course.duration}`, color: "#475569", bg: "#f8fafc" },
-                          { text: `₹${course.fees?.toLocaleString()}`, color: "#0f172a", bg: "#f8fafc" },
-                        ].map((tag, i) => (
-                          <span key={i} style={{ fontSize: 10, fontWeight: 700, color: tag.color, background: tag.bg, padding: "2px 8px", borderRadius: 6, textTransform: "uppercase" }}>{tag.text}</span>
-                        ))}
-                      </div>
-                      {course.shortDescription && (
-                        <p style={{ margin: "5px 0 0", fontSize: 12, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{course.shortDescription}</p>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", gap: 4, flexShrink: 0, alignSelf: isMobile ? "flex-end" : "auto" }}>
-                      <button onClick={() => setEditingCourse({ ...course })}
-                        style={{ padding: 8, background: "none", border: "none", borderRadius: 8, color: "#94a3b8", cursor: "pointer" }}>
-                        <Edit3 size={15} />
-                      </button>
-                      <button onClick={() => handleDelete(course._id)}
-                        style={{ padding: 8, background: "none", border: "none", borderRadius: 8, color: "#94a3b8", cursor: "pointer" }}>
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      {activeSection === "courses-add" && (
+        <AddCourse token={token} editingId={editingCourseId} setEditingId={setEditingCourseId} setActiveSection={setActiveSection} />
+      )}
+      {activeSection === "courses-subjects" && <Subjects token={token} />}
+      {activeSection === "courses-materials" && <StudyMaterials token={token} />}
     </div>
   );
 }

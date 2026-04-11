@@ -25,17 +25,19 @@ export default function ManageQuestions({ token }) {
   const [questions, setQuestions] = useState([]);
   const [groups, setGroups] = useState([]);
   const [courses, setCourses] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [courseSubjects, setCourseSubjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('view');
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
-  const [filters, setFilters] = useState({ groupId: '', course: '', type: '' });
+  const [filters, setFilters] = useState({ groupId: '', course: '', type: '', subject: '' });
   const [searchQuery, setSearchQuery] = useState('');
   const [manualQuestion, setManualQuestion] = useState({
     type: 'mcq', question: '', options: ['', '', '', ''],
-    correctAnswer: '', marks: 1, groupId: '', course: '',
+    correctAnswer: '', marks: 1, groupId: '', course: '', subject: '',
   });
   const [csvPreview, setCsvPreview] = useState([]);
-  const [bulkMeta, setBulkMeta] = useState({ groupId: '', course: '' });
+  const [bulkMeta, setBulkMeta] = useState({ groupId: '', course: '', subject: '' });
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
@@ -47,13 +49,15 @@ export default function ManageQuestions({ token }) {
     if (!token) return;
     try {
       setLoading(true);
-      const [coursesRes, groupsRes] = await Promise.all([
+      const [coursesRes, groupsRes, subjectsRes] = await Promise.all([
         fetch(`${API_BASE_URL}/courses`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API_BASE_URL}/question-groups`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE_URL}/subjects`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
-      if (coursesRes.ok && groupsRes.ok) {
+      if (coursesRes.ok && groupsRes.ok && subjectsRes.ok) {
         setCourses(await coursesRes.json());
         setGroups(await groupsRes.json());
+        setSubjects(await subjectsRes.json());
       }
       await fetchQuestions(1);
     } catch { toast.error('Loading Error'); }
@@ -77,6 +81,22 @@ export default function ManageQuestions({ token }) {
 
   useEffect(() => { fetchData(); }, [token]);
 
+  // Sync subjects when course changes
+  useEffect(() => {
+    const selectedCourseName = manualQuestion.course || filters.course || bulkMeta.course;
+    if (selectedCourseName) {
+      const course = courses.find(c => c.name === selectedCourseName);
+      if (course && course.subjects) {
+        const filtered = subjects.filter(s => course.subjects.includes(s._id));
+        setCourseSubjects(filtered);
+      } else {
+        setCourseSubjects([]);
+      }
+    } else {
+      setCourseSubjects([]);
+    }
+  }, [manualQuestion.course, filters.course, bulkMeta.course, courses, subjects]);
+
   const handleManualSubmit = async (e) => {
     e.preventDefault();
     if (!manualQuestion.question || !manualQuestion.course)
@@ -94,7 +114,7 @@ export default function ManageQuestions({ token }) {
       });
       if (res.ok) {
         toast.success('Added Successfully');
-        setManualQuestion({ type: 'mcq', question: '', options: ['', '', '', ''], correctAnswer: '', marks: 1, groupId: '', course: '' });
+        setManualQuestion({ type: 'mcq', question: '', options: ['', '', '', ''], correctAnswer: '', marks: 1, groupId: '', course: '', subject: '' });
         fetchQuestions(1);
         setActiveTab('view');
       } else {
@@ -136,6 +156,7 @@ export default function ManageQuestions({ token }) {
           type: v[0]?.trim() || 'mcq', question: v[1]?.trim() || '',
           options: v.slice(2, 6).map(opt => opt?.trim()).filter(opt => opt),
           correctAnswer: v[6]?.trim() || '', marks: parseInt(v[7]) || 1,
+          subject: v[8]?.trim() || '',
         };
       });
       setCsvPreview(parsed);
@@ -161,13 +182,13 @@ export default function ManageQuestions({ token }) {
   };
 
   const downloadSampleCSV = () => {
-    const headers = "type,question,option1,option2,option3,option4,correctAnswer,marks";
+    const headers = "type,question,option1,option2,option3,option4,correctAnswer,marks,subject";
     const samples = [
-      'mcq,"What is the capital of France?",Paris,London,Berlin,Madrid,0,1',
-      'mcq,"Which planet is known as the Red Planet?",Earth,Mars,Jupiter,Venus,1,1',
-      'mcq,"What is 2 + 2?",3,4,5,6,1,1',
-      'descriptive,"Explain the process of photosynthesis.",,,,,Photosynthesis is the process by which green plants and some other organisms use sunlight to synthesize foods with the help of chlorophyll.,5',
-      'short-answer,"What is the chemical symbol for water?",,,,,H2O,2'
+      'mcq,"What is the capital of France?",Paris,London,Berlin,Madrid,0,1,Geography',
+      'mcq,"Which planet is known as the Red Planet?",Earth,Mars,Jupiter,Venus,1,1,Astronomy',
+      'mcq,"What is 2 + 2?",3,4,5,6,1,1,Mathematics',
+      'descriptive,"Explain the process of photosynthesis.",,,,,Photosynthesis is the process...,5,Science',
+      'short-answer,"What is the chemical symbol for water?",,,,,H2O,2,Chemistry'
     ];
     const csvContent = headers + "\n" + samples.join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -280,7 +301,7 @@ export default function ManageQuestions({ token }) {
           </div>
           <form onSubmit={handleManualSubmit} style={{ padding: isMobile ? 16 : 24, display: 'flex', flexDirection: 'column', gap: 20, background: '#fff' }}>
             {/* Type + Course + Group */}
-            <div style={g3}>
+            <div style={g2}>
               <div>
                 <label style={lbl}>Question Type</label>
                 <select style={inp} value={manualQuestion.type}
@@ -293,9 +314,21 @@ export default function ManageQuestions({ token }) {
               <div>
                 <label style={lbl}>Domain Target (Course)</label>
                 <select style={inp} value={manualQuestion.course} required
-                  onChange={e => setManualQuestion({ ...manualQuestion, course: e.target.value })}>
+                  onChange={e => setManualQuestion({ ...manualQuestion, course: e.target.value, subject: '' })}>
                   <option value="">SELECT_DOMAIN</option>
                   {courses.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+            </div>
+            
+            <div style={g2}>
+              <div>
+                <label style={lbl}>Subject</label>
+                <select style={inp} value={manualQuestion.subject}
+                  onChange={e => setManualQuestion({ ...manualQuestion, subject: e.target.value })}
+                  disabled={!manualQuestion.course}>
+                  <option value="">SELECT_SUBJECT</option>
+                  {courseSubjects.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
                 </select>
               </div>
               <div>
@@ -412,19 +445,18 @@ export default function ManageQuestions({ token }) {
               <div>
                 <label style={lbl}>Target Course</label>
                 <select style={inp} value={bulkMeta.course}
-                  onChange={e => setBulkMeta({ ...bulkMeta, course: e.target.value })}>
+                  onChange={e => setBulkMeta({ ...bulkMeta, course: e.target.value, subject: '' })}>
                   <option value="">SELECT_DOMAIN</option>
                   {courses.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                 </select>
               </div>
               <div>
-                <label style={lbl}>Question Group</label>
-                <select style={inp} value={bulkMeta.groupId}
-                  onChange={e => setBulkMeta({ ...bulkMeta, groupId: e.target.value })}>
-                  <option value="">UNCATEGORIZED</option>
-                  {groups.filter(g => !bulkMeta.course || g.course === bulkMeta.course).map(g => (
-                    <option key={g._id} value={g._id}>{g.name}</option>
-                  ))}
+                <label style={lbl}>Subject (Optional if in CSV)</label>
+                <select style={inp} value={bulkMeta.subject}
+                  onChange={e => setBulkMeta({ ...bulkMeta, subject: e.target.value })}
+                  disabled={!bulkMeta.course}>
+                  <option value="">ALL_UNIT_TARGETS</option>
+                  {courseSubjects.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
                 </select>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
@@ -444,6 +476,17 @@ export default function ManageQuestions({ token }) {
                   Download Sample CSV
                 </button>
               </div>
+            </div>
+            
+            <div>
+              <label style={lbl}>Question Group</label>
+              <select style={inp} value={bulkMeta.groupId}
+                onChange={e => setBulkMeta({ ...bulkMeta, groupId: e.target.value })}>
+                <option value="">UNCATEGORIZED</option>
+                {groups.filter(g => !bulkMeta.course || g.course === bulkMeta.course).map(g => (
+                  <option key={g._id} value={g._id}>{g.name}</option>
+                ))}
+              </select>
             </div>
 
             {/* CSV drop zone */}
@@ -542,10 +585,17 @@ export default function ManageQuestions({ token }) {
             {/* Filter selects */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <select value={filters.course}
-                onChange={e => { setFilters({ ...filters, course: e.target.value, groupId: '' }); fetchQuestions(1); }}
+                onChange={e => { setFilters({ ...filters, course: e.target.value, groupId: '', subject: '' }); fetchQuestions(1); }}
                 style={{ ...inp, width: 'auto', fontSize: 9, letterSpacing: '0.08em', padding: '8px 12px' }}>
                 <option value="">ALL_COURSES</option>
                 {courses.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+              </select>
+              <select value={filters.subject}
+                onChange={e => { setFilters({ ...filters, subject: e.target.value }); fetchQuestions(1); }}
+                style={{ ...inp, width: 'auto', fontSize: 9, letterSpacing: '0.08em', padding: '8px 12px' }}
+                disabled={!filters.course}>
+                <option value="">ALL_SUBJECTS</option>
+                {courseSubjects.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
               </select>
               <select value={filters.groupId}
                 onChange={e => { setFilters({ ...filters, groupId: e.target.value }); fetchQuestions(1); }}
@@ -555,7 +605,7 @@ export default function ManageQuestions({ token }) {
                   <option key={g._id} value={g._id}>{g.name}</option>
                 ))}
               </select>
-              <button onClick={() => { setFilters({ groupId: '', course: '', type: '' }); setSearchQuery(''); fetchQuestions(1); }}
+              <button onClick={() => { setFilters({ groupId: '', course: '', type: '', subject: '' }); setSearchQuery(''); fetchQuestions(1); }}
                 style={{ padding: '8px 12px', background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 10, color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                 title="Reset Filters">
                 <Activity size={15} />
@@ -587,7 +637,8 @@ export default function ManageQuestions({ token }) {
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
                         <span style={{ fontSize: 8, fontWeight: 900, padding: '2px 7px', borderRadius: 5, background: q.type === 'mcq' ? '#eef2ff' : '#fffbeb', color: q.type === 'mcq' ? '#4f46e5' : '#d97706', textTransform: 'uppercase' }}>{q.type}</span>
                         <span style={{ fontSize: 8, fontWeight: 900, padding: '2px 7px', borderRadius: 5, background: '#f1f5f9', color: '#475569', textTransform: 'uppercase' }}>{q.course}</span>
-                        <span style={{ fontSize: 8, fontWeight: 900, padding: '2px 7px', borderRadius: 5, background: '#f1f5f9', color: '#2563eb', textTransform: 'uppercase' }}>{q.marks} MK</span>
+                        <span style={{ fontSize: 8, fontWeight: 900, padding: '2px 7px', borderRadius: 5, background: '#f1f5f9', color: '#2563eb', textTransform: 'uppercase' }}>{q.subject || 'GENERAL'}</span>
+                        <span style={{ fontSize: 8, fontWeight: 900, padding: '2px 7px', borderRadius: 5, background: '#f8fafc', color: '#0f172a', textTransform: 'uppercase' }}>{q.marks} MK</span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
@@ -609,8 +660,8 @@ export default function ManageQuestions({ token }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                   <thead style={{ background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
                     <tr>
-                      {['Question', 'Course', 'Marks', 'Actions'].map((h, i) => (
-                        <th key={i} style={{ ...thSt, textAlign: i >= 2 ? 'center' : 'left' }}>{h}</th>
+                      {['Question', 'Course', 'Subject', 'Marks', 'Actions'].map((h, i) => (
+                        <th key={i} style={{ ...thSt, textAlign: i >= 3 ? 'center' : 'left' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -649,6 +700,9 @@ export default function ManageQuestions({ token }) {
                             <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', boxShadow: '0 0 6px rgba(59,130,246,0.5)', flexShrink: 0 }} />
                             <span style={{ fontSize: 10, fontWeight: 900, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{q.course}</span>
                           </div>
+                        </td>
+                        <td style={{ padding: '14px 16px' }}>
+                          <span style={{ fontSize: 10, fontWeight: 900, color: '#6366f1', textTransform: 'uppercase' }}>{q.subject || 'GENERAL'}</span>
                         </td>
                         <td style={{ padding: '14px 16px', textAlign: 'center' }}>
                           <span style={{ fontSize: 10, fontWeight: 900, color: '#0f172a', background: '#f1f5f9', padding: '4px 10px', borderRadius: 8, border: '1px solid #e2e8f0' }}>{q.marks}</span>
@@ -726,6 +780,29 @@ export default function ManageQuestions({ token }) {
                 <textarea style={{ ...inp, minHeight: 130, resize: 'vertical', textTransform: 'none', fontWeight: 700, lineHeight: 1.6 }}
                   value={editingQuestion.question} required
                   onChange={e => setEditingQuestion({ ...editingQuestion, question: e.target.value })} />
+              </div>
+              <div style={g2}>
+                <div>
+                  <label style={lbl}>Course</label>
+                  <select style={inp} value={editingQuestion.course}
+                    onChange={e => setEditingQuestion({ ...editingQuestion, course: e.target.value, subject: '' })}>
+                    <option value="">SELECT_COURSE</option>
+                    {courses.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={lbl}>Subject</label>
+                  <select style={inp} value={editingQuestion.subject}
+                    onChange={e => setEditingQuestion({ ...editingQuestion, subject: e.target.value })}>
+                    <option value="">SELECT_SUBJECT</option>
+                    {subjects
+                      .filter(s => {
+                        const course = courses.find(c => c.name === editingQuestion.course);
+                        return course && course.subjects.includes(s._id);
+                      })
+                      .map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+                  </select>
+                </div>
               </div>
               <div style={g2}>
                 <div>

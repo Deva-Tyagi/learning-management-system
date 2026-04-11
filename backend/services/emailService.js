@@ -162,3 +162,67 @@ exports.sendEmailNotification = async (toEmail, subject, message) => {
     throw error;
   }
 };
+
+/**
+ * Send Enrollment Confirmation & Fee Schedule to Student
+ */
+exports.sendEnrollmentFeeEmail = async (studentData, schedule) => {
+  const { name, email, course, totalFees, feesPaid, registrationFee } = studentData;
+  const pending = totalFees - feesPaid;
+
+  const scheduleRows = schedule.map((item, index) => `
+    <tr>
+      <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px;">${item.label || `Payment ${index + 1}`}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: 700;">₹${item.amount.toLocaleString('en-IN')}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #64748b;">${new Date(item.dueDate).toLocaleDateString('en-GB')}</td>
+    </tr>
+  `).join('');
+
+  const content = `
+    <p style="font-size: 16px; margin-bottom: 20px;">Dear <strong>${name}</strong>,</p>
+    <p style="font-size: 15px; margin-bottom: 24px;">Congratulations! You have been successfully enrolled in the <strong>${course}</strong> course. Below are your enrollment details and payment schedule.</p>
+    
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+      <h3 style="margin: 0 0 15px 0; font-size: 14px; text-transform: uppercase; color: #475569; letter-spacing: 0.05em;">Course Summary</h3>
+      <table style="width: 100%; font-size: 14px;">
+        <tr><td style="padding: 4px 0; color: #64748b;">Total Course Fee:</td><td style="text-align: right; font-weight: 700;">₹${totalFees.toLocaleString('en-IN')}</td></tr>
+        <tr><td style="padding: 4px 0; color: #64748b;">Registration Fee:</td><td style="text-align: right; font-weight: 700;">₹${registrationFee.toLocaleString('en-IN')}</td></tr>
+        <tr><td style="padding: 4px 0; color: #64748b;">Amount Paid:</td><td style="text-align: right; font-weight: 700; color: #059669;">₹${feesPaid.toLocaleString('en-IN')}</td></tr>
+        <tr style="border-top: 1px solid #cbd5e1;"><td style="padding: 8px 0 0 0; font-weight: 800; color: #1e293b;">Pending Balance:</td><td style="padding: 8px 0 0 0; text-align: right; font-weight: 800; color: #e11d48;">₹${pending.toLocaleString('en-IN')}</td></tr>
+      </table>
+    </div>
+
+    <h3 style="font-size: 14px; text-transform: uppercase; color: #475569; margin-bottom: 12px; letter-spacing: 0.05em;">Payment Schedule</h3>
+    <table style="width: 100%; border-collapse: collapse; background-color: #ffffff; border: 1px solid #f1f5f9; border-radius: 8px; overflow: hidden;">
+      <thead style="background-color: #f1f5f9;">
+        <tr>
+          <th style="padding: 10px; text-align: left; font-size: 11px; text-transform: uppercase; color: #475569;">Description</th>
+          <th style="padding: 10px; text-align: left; font-size: 11px; text-transform: uppercase; color: #475569;">Amount</th>
+          <th style="padding: 10px; text-align: left; font-size: 11px; text-transform: uppercase; color: #475569;">Due Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${scheduleRows}
+      </tbody>
+    </table>
+
+    <div style="margin-top: 30px; padding: 15px; background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; text-align: center;">
+      <p style="margin: 0; font-size: 13px; color: #92400e; font-weight: 600;">Please ensure timely payments to avoid any disruption in your learning journey.</p>
+    </div>
+  `;
+
+  const mailOptions = {
+    from: `"NovaTech Academy" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: `Welcome to ${course}! Enrollment Confirmed`,
+    html: baseEmailTemplate("Enrollment & Fee Plan", content),
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`[Email Service] Enrollment fee email sent to ${email}`);
+  } catch (err) {
+    console.error('[Email Service] Error sending enrollment fee email:', err.message);
+  }
+};
+

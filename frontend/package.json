@@ -41,6 +41,7 @@
     "react-router-dom": "^7.13.1",
     "react-slick": "^0.30.2",
     "slick-carousel": "^1.8.1",
+    "socket.io-client": "^4.8.3",
     "sonner": "^1.7.1",
     "swiper": "^11.1.15"
   },

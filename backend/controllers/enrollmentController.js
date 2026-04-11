@@ -14,45 +14,43 @@ async function createEnrollment(req, res) {
     const { studentId, courseId, courseName, doj, scheme, customize = {}, installments } = req.body || {};
 
     // Presence checks
-    if (!studentId) return res.status(400).json({ message: 'studentId is required' }); // [validate]
-    if (!doj) return res.status(400).json({ message: 'doj (date of joining) is required' }); // [validate]
+    if (!studentId) return res.status(400).json({ message: 'studentId is required' }); 
+    if (!doj) return res.status(400).json({ message: 'doj (date of joining) is required' }); 
     if (!scheme || !['MONTHLY', 'FULL', 'INSTALLMENT'].includes(scheme)) {
       return res.status(400).json({ message: 'scheme must be MONTHLY, FULL, or INSTALLMENT' });
-    } // [validate]
+    } 
 
-    // ObjectId validation (avoid CastError on findById)
+    // ObjectId validation
     if (!mongoose.isValidObjectId(studentId)) {
       return res.status(400).json({ message: 'Invalid studentId' });
-    } // [oid]
+    } 
     if (courseId && !mongoose.isValidObjectId(courseId)) {
       return res.status(400).json({ message: 'Invalid courseId' });
-    } // [oid]
+    } 
 
     stage = 'load-student';
     const student = await Student.findById(studentId);
-    if (!student) return res.status(400).json({ message: 'Student not found' }); // [lookup]
+    if (!student) return res.status(400).json({ message: 'Student not found' }); 
 
     stage = 'load-course';
     let course = null;
     if (courseId) {
       course = await Course.findById(courseId);
       if (!course) return res.status(400).json({ message: 'Course not found' });
-    } // [lookup]
+    } 
 
-    // Compute fee bases (prefer customize, then course)
     const baseMonthly = customize.monthlyFee ?? course?.monthlyFee ?? 0;
     const baseDuration = customize.durationMonths ?? course?.durationMonths ?? 0;
-    const baseTotal = customize.totalFee ?? course?.totalFee ?? 0; // [fees]
+    const baseTotal = customize.totalFee ?? course?.totalFee ?? 0; 
 
     const resolvedCourseName = course?.name || courseName;
     if (!resolvedCourseName) {
       return res.status(400).json({ message: 'courseName missing and courseId not resolved' });
-    } // [validate]
+    } 
 
     stage = 'start-tx';
-    session.startTransaction(); // use MongoDB transaction session [1]
+    session.startTransaction(); 
 
-    // Create the enrollment (use Document.save with session)
     stage = 'create-enrollment';
     const enrollmentDoc = {
       studentId,
@@ -69,20 +67,17 @@ async function createEnrollment(req, res) {
         scheme === 'MONTHLY'
           ? 500 + Number(baseMonthly) * Number(baseDuration)
           : 500 + Number(baseTotal),
-    }; // [fees]
+    }; 
 
-    // IMPORTANT: save with session ensures a real document with _id is returned
-    const enr = await new Enrollment(enrollmentDoc).save({ session }); // [2][1]
+    const enr = await new Enrollment(enrollmentDoc).save({ session }); 
     if (!enr || !enr._id) {
-      return res.status(400).json({ message: 'create-enrollment: missing required fields or failed validation' });
-    } // [validate]
+      return res.status(400).json({ message: 'create-enrollment failed' });
+    } 
 
-    // Build immutable schedule
     stage = 'build-schedule';
     const schedules = [];
     let seq = 1;
 
-    // Registration fee due on DOJ (fixed)
     schedules.push({
       enrollmentId: enr._id,
       studentId,
@@ -93,12 +88,12 @@ async function createEnrollment(req, res) {
       dueDate: new Date(doj),
       status: 'DUE',
       adminId: req.user.id,
-    }); // [fixed]
+    }); 
 
     if (scheme === 'MONTHLY') {
       if (!(baseMonthly > 0 && baseDuration > 0)) {
         return res.status(400).json({ message: 'Monthly scheme requires monthlyFee > 0 and durationMonths > 0' });
-      } // [validate]
+      } 
       for (let i = 1; i <= baseDuration; i++) {
         schedules.push({
           enrollmentId: enr._id,
@@ -111,11 +106,11 @@ async function createEnrollment(req, res) {
           status: 'DUE',
           adminId: req.user.id,
         });
-      } // [fixed]
+      } 
     } else if (scheme === 'FULL') {
       if (!(baseTotal > 0)) {
         return res.status(400).json({ message: 'Full payment scheme requires totalFee > 0' });
-      } // [validate]
+      } 
       schedules.push({
         enrollmentId: enr._id,
         studentId,
@@ -126,7 +121,7 @@ async function createEnrollment(req, res) {
         dueDate: new Date(doj),
         status: 'DUE',
         adminId: req.user.id,
-      }); // [fixed]
+      }); 
     } else if (scheme === 'INSTALLMENT') {
       if (Array.isArray(installments) && installments.length) {
         installments.forEach((ins, idx) => {
@@ -146,7 +141,7 @@ async function createEnrollment(req, res) {
         const parts = typeof installments === 'number' ? installments : 2;
         if (!(baseTotal > 0 && parts > 0)) {
           return res.status(400).json({ message: 'Installment scheme requires totalFee > 0 and installments > 0' });
-        } // [validate]
+        } 
         const each = Math.round((Number(baseTotal) / Number(parts)) * 100) / 100;
         for (let i = 1; i <= parts; i++) {
           schedules.push({
@@ -161,30 +156,48 @@ async function createEnrollment(req, res) {
             adminId: req.user.id,
           });
         }
-      } // [fixed]
+      } 
     }
 
-    // Persist schedules and reminder logs atomically
     stage = 'insert-schedules';
-    const inserted = await FeeSchedule.insertMany(schedules, { session }); // atomic with session [1]
+    const inserted = await FeeSchedule.insertMany(schedules, { session }); 
 
     stage = 'create-reminders';
-    await scheduleRemindersForSchedules(inserted, session); // create pre/on/post logs [1]
+    await scheduleRemindersForSchedules(inserted, session); 
 
     stage = 'commit';
     await session.commitTransaction();
-    res.status(201).json({ message: 'Enrollment and schedule created', enrollment: enr, schedules: inserted }); // [ok]
+    res.status(201).json({ message: 'Enrollment and schedule created', enrollment: enr, schedules: inserted }); 
   } catch (err) {
     console.error('createEnrollment error @', stage, err?.message, err);
     try { await session.abortTransaction(); } catch {}
-    const msg = `${stage}: ${String(err?.message || 'unknown error')}`;
-    if (msg.includes('required') || msg.includes('Invalid') || msg.includes('not found') || msg.includes('requires')) {
-      return res.status(400).json({ message: msg });
-    } // [handling]
-    res.status(500).json({ message: 'Failed to create enrollment', error: msg }); // [handling]
+    res.status(500).json({ message: 'Failed to create enrollment', error: err.message }); 
   } finally {
     session.endSession();
   }
 }
 
-module.exports = { createEnrollment };
+async function getEnrollments(req, res) {
+  try {
+    // FIX: Fetch directly from Student model to match the 50 students seen in Checklist
+    // This allows bulk issuance even if they haven't been 'Enrolled' in the fee module yet
+    const students = await Student.find({ adminId: req.user.id, isActive: true })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Format for DesignCards.jsx frontend
+    const formatted = students.map(s => ({
+      _id: s._id,
+      studentId: s, // DesignCards.jsx expects s.studentId.name etc.
+      course: s.course || 'N/A',
+      batch: s.batch || 'N/A'
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    console.error('getEnrollments error:', err);
+    res.status(500).json({ message: 'Failed to fetch students for issuance' });
+  }
+}
+
+module.exports = { createEnrollment, getEnrollments };

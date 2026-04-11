@@ -11,6 +11,8 @@ const s3Client = new S3Client({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 // Configure S3 Storage Engine for Multer
@@ -49,7 +51,12 @@ const getPresignedUrl = async (key) => {
     const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1 hour expiry
     return url;
   } catch (err) {
-    console.error('Error generating presigned URL:', err);
+    console.error('[S3_ERROR] getPresignedUrl failed:', {
+      message: err.message,
+      bucket: process.env.AWS_BUCKET_NAME || process.env.AWS_BUCKET,
+      key: key,
+      region: process.env.AWS_REGION
+    });
     return null;
   }
 };

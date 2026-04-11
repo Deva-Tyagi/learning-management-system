@@ -29,9 +29,10 @@ export default function ScheduleExam({ token }) {
   const [scheduleData, setScheduleData] = useState({
     title: '', description: '', course: '', batch: 'ALL_BATCHES',
     examDate: '', startTime: '', endTime: '', duration: '',
-    passingPercentage: 40,
+    passingPercentage: 40, totalExamMarks: 0,
     instructions: ['Read all questions carefully.', 'No negative marking.'],
-    allowLateSubmission: false, showResultsImmediately: true, randomizeQuestions: false,
+    allowLateSubmission: false, showResultsImmediately: true, randomizeQuestions: true,
+    automaticSerialization: true,
   });
   const [groupId, setGroupId] = useState('');
   const [fetchedQuestions, setFetchedQuestions] = useState([]);
@@ -45,7 +46,8 @@ export default function ScheduleExam({ token }) {
   const isMobile = width < 640;
   const isDesktop = width >= 1024;
 
-  const totalMarks = fetchedQuestions.reduce((sum, q) => sum + (q.marks || 0), 0);
+  const groupTotalMarks = fetchedQuestions.reduce((sum, q) => sum + (q.marks || 0), 0);
+  const totalMarks = scheduleData.totalExamMarks > 0 ? scheduleData.totalExamMarks : groupTotalMarks;
   const passingMarks = Math.ceil((totalMarks * (scheduleData.passingPercentage || 0)) / 100);
 
   useEffect(() => {
@@ -138,11 +140,13 @@ export default function ScheduleExam({ token }) {
       });
       if (res.ok) {
         toast.success('Assessment Scheduled Successfully');
+        toast.info('Manifest Decrypted: Admit Cards Issued Automatically');
         setScheduleData({
           title: '', description: '', course: '', batch: 'ALL_BATCHES', examDate: '',
-          startTime: '', endTime: '', duration: '', passingPercentage: 40,
+          startTime: '', endTime: '', duration: '', passingPercentage: 40, totalExamMarks: 0,
           instructions: ['Read all questions carefully.', 'No negative marking.'],
-          allowLateSubmission: false, showResultsImmediately: true, randomizeQuestions: false,
+          allowLateSubmission: false, showResultsImmediately: true, randomizeQuestions: true,
+          automaticSerialization: true,
         });
         setGroupId(''); 
         setFetchedQuestions([]);
@@ -416,13 +420,13 @@ export default function ScheduleExam({ token }) {
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, width: '100%', paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
                       <div style={{ textAlign: 'left' }}>
-                        <p style={{ margin: 0, fontSize: 8, fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase' }}>Weight</p>
-                        <p style={{ margin: '3px 0 0', fontSize: 14, fontWeight: 900, color: '#1e293b' }}>{totalMarks} MK</p>
+                        <p style={{ margin: 0, fontSize: 8, fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase' }}>Pool Weight</p>
+                        <p style={{ margin: '3px 0 0', fontSize: 14, fontWeight: 900, color: '#1e293b' }}>{groupTotalMarks} MK</p>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <p style={{ margin: 0, fontSize: 8, fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase' }}>Avg Val</p>
+                        <p style={{ margin: 0, fontSize: 8, fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase' }}>Available</p>
                         <p style={{ margin: '3px 0 0', fontSize: 14, fontWeight: 900, color: '#1e293b' }}>
-                          {(totalMarks / (fetchedQuestions.length || 1)).toFixed(1)}
+                          {fetchedQuestions.length} Q
                         </p>
                       </div>
                     </div>
@@ -433,6 +437,52 @@ export default function ScheduleExam({ token }) {
                     <p style={{ margin: 0, fontSize: 9, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em' }}>No Vectors Loaded</p>
                   </div>
                 )}
+              </div>
+
+              {/* Advanced Toggles */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[
+                  { label: 'Allow Late Entry', field: 'allowLateSubmission' },
+                  { label: 'Show Results Instantly', field: 'showResultsImmediately' },
+                  { label: 'Randomize Order', field: 'randomizeQuestions' },
+                  { label: 'Serial Admission', field: 'automaticSerialization' },
+                ].map(toggle => (
+                  <div key={toggle.field} 
+                    onClick={() => handleInputChange(toggle.field, !scheduleData[toggle.field])}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 14px', borderRadius: 12, background: '#f8fafc',
+                      border: '1px solid #f1f5f9', cursor: 'pointer'
+                    }}>
+                    <span style={{ fontSize: 9, fontWeight: 900, color: '#475569', textTransform: 'uppercase' }}>{toggle.label}</span>
+                    <div style={{
+                      width: 28, height: 16, borderRadius: 20, background: scheduleData[toggle.field] ? '#2563eb' : '#cbd5e1',
+                      position: 'relative', transition: 'all 0.2s'
+                    }}>
+                      <div style={{
+                        width: 10, height: 10, borderRadius: '50%', background: '#fff',
+                        position: 'absolute', top: 3, left: scheduleData[toggle.field] ? 15 : 3,
+                        transition: 'all 0.2s'
+                      }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Total Marks Override */}
+              <div>
+                <label style={lbl}>Target Exam Marks (Goal)</label>
+                <div style={{ position: 'relative' }}>
+                  <input type="number" style={{ ...inp, paddingLeft: 34, color: '#2563eb' }} 
+                    placeholder="SET TOTAL MARKS..."
+                    value={scheduleData.totalExamMarks || ''}
+                    onChange={e => handleInputChange('totalExamMarks', parseInt(e.target.value) || 0)}
+                  />
+                  <Trophy size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                </div>
+                <p style={{ margin: '6px 0 0', fontSize: 8, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
+                  {scheduleData.totalExamMarks > 0 ? 'SYSTEM WILL AUTO-PICK QUESTIONS TO MATCH GOAL' : 'USING FULL GROUP WEIGHT'}
+                </p>
               </div>
 
               {/* Passing threshold slider */}

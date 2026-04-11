@@ -113,6 +113,18 @@ export default function ManageExams({ token }) {
   const formatDate = (d) => { try { return d ? new Date(d).toLocaleDateString() : "N/A"; } catch { return "N/A"; } };
   const formatTime = (t) => { try { return t ? new Date(`2000-01-01T${t}`).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A"; } catch { return t || "N/A"; } };
 
+  const getExamStatus = (exam) => {
+    if (!exam.isActive) return { label: "DEACTIVATED", color: "#64748b", bg: "#f1f5f9" };
+    const now = new Date();
+    const examDate = new Date(exam.examDate);
+    const start = new Date(`${exam.examDate.split('T')[0]}T${exam.startTime}`);
+    const end = new Date(`${exam.examDate.split('T')[0]}T${exam.endTime}`);
+
+    if (now < start) return { label: "UPCOMING", color: "#3b82f6", bg: "#eff6ff" };
+    if (now >= start && now <= end) return { label: "ONGOING", color: "#10b981", bg: "#ecfdf5" };
+    return { label: "COMPLETED", color: "#6366f1", bg: "#eef2ff" };
+  };
+
   /* ── Style tokens ── */
   const selInp = {
     width: "100%", background: "#f1f5f9", border: "none",
@@ -232,9 +244,14 @@ export default function ManageExams({ token }) {
                   <p style={{ margin: 0, fontSize: 12, fontWeight: 900, color: "#1e293b", textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{exam?.title || "UNTITLED"}</p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
                     <span style={{ fontSize: 9, fontWeight: 900, color: "#2563eb", background: "#eff6ff", border: "1px solid #bfdbfe", padding: "2px 7px", borderRadius: 6, textTransform: "uppercase" }}>{exam?.course || "GENERAL"}</span>
-                    <span style={{ fontSize: 9, fontWeight: 900, color: exam?.isActive ? "#2563eb" : "#94a3b8", background: exam?.isActive ? "#eff6ff" : "#f8fafc", padding: "2px 7px", borderRadius: 6, textTransform: "uppercase" }}>
-                      {exam?.isActive ? "ACTIVE" : "INACTIVE"}
-                    </span>
+                    {(() => {
+                      const status = getExamStatus(exam);
+                      return (
+                        <span style={{ fontSize: 9, fontWeight: 900, color: status.color, background: status.bg, padding: "2px 7px", borderRadius: 6, textTransform: "uppercase" }}>
+                          {status.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <p style={{ margin: "6px 0 0", fontSize: 10, color: "#94a3b8", fontFamily: "monospace" }}>{formatDate(exam?.examDate)}</p>
                 </div>
@@ -314,12 +331,19 @@ export default function ManageExams({ token }) {
                     {showStatus && (
                       <td style={{ padding: "16px 16px", textAlign: "center" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                          <div style={{ height: 5, width: 44, background: "#0f172a", borderRadius: 99, overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: exam?.isActive ? "100%" : "18%", background: exam?.isActive ? "#3b82f6" : "#475569", transition: "width 0.4s", boxShadow: exam?.isActive ? "0 0 8px rgba(59,130,246,0.5)" : "none" }} />
-                          </div>
-                          <span style={{ fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.1em", color: exam?.isActive ? "#3b82f6" : "#64748b" }}>
-                            {exam?.isActive ? "ACTIVE" : "INACTIVE"}
-                          </span>
+                          {(() => {
+                            const status = getExamStatus(exam);
+                            return (
+                              <>
+                                <div style={{ height: 5, width: 44, background: "#0f172a", borderRadius: 99, overflow: "hidden" }}>
+                                  <div style={{ height: "100%", width: "100%", background: status.color, transition: "width 0.4s", boxShadow: `0 0 8px ${status.color}80` }} />
+                                </div>
+                                <span style={{ fontSize: 8, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.1em", color: status.color }}>
+                                  {status.label}
+                                </span>
+                              </>
+                            );
+                          })()}
                         </div>
                       </td>
                     )}
@@ -384,13 +408,16 @@ export default function ManageExams({ token }) {
                   { label: "Course", value: examToView?.course || "N/A", icon: Layers },
                   { label: "Batch", value: examToView?.batch || "N/A", icon: Database },
                   { label: "Marks", value: `${examToView?.totalMarks ?? 0} / PASS: ${examToView?.passingMarks ?? 0}`, icon: Trophy },
+                  { label: "Randomize", value: examToView?.randomizeQuestions ? "ENABLED" : "DISABLED", icon: Activity },
+                  { label: "Results", value: examToView?.showResultsImmediately ? "INSTANT" : "LOGGED", icon: FileText },
+                  { label: "Serial", value: examToView?.automaticSerialization ? "AUTO" : "MANUAL", icon: Cpu },
                 ].map((item, i) => (
                   <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <item.icon size={12} color="#3b82f6" />
                       <p style={{ margin: 0, fontSize: 9, fontWeight: 900, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em" }}>{item.label}</p>
                     </div>
-                    <p style={{ margin: 0, fontSize: 12, fontWeight: 900, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.02em" }}>{item.value}</p>
+                    <p style={{ margin: 0, fontSize: 11, fontWeight: 900, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.02em" }}>{item.value}</p>
                   </div>
                 ))}
               </div>

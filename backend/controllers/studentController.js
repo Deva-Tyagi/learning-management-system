@@ -1,7 +1,9 @@
 const Student = require('../models/Student');
+const FeeSchedule = require('../models/FeeSchedule');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { getPresignedUrl } = require('../config/s3');
+const emailService = require('../services/emailService');
 
 /** Next REG-{year}-{#####} for this admin; skips taken numbers and respects manual values if unique. */
 async function ensureUniqueRegistrationNo(adminId, preferred) {
@@ -31,7 +33,7 @@ exports.previewRegistrationNumber = async (req, res) => {
   }
 };
 
-// STUDENT LOGIN CONTROLLER (ADD THIS AT THE TOP OF THE FILE)
+// STUDENT LOGIN CONTROLLER
 exports.loginStudent = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -41,14 +43,12 @@ exports.loginStudent = async (req, res) => {
     const isMatch = await bcrypt.compare(password, student.password);
     if (!isMatch) return res.status(400).json({ msg: 'Invalid credentials' });
 
-    // ⬇️ Store correct "_id" in token as "id"
     const token = jwt.sign(
       { id: student._id },
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
 
-    // Remove password before sending
     const { password: _pw, ...studentSafe } = student.toObject();
 
     res.json({
@@ -66,10 +66,9 @@ exports.getStudents = async (req, res) => {
   try {
     const students = await Student.find({ adminId: req.user.id }).select('-password').sort({ createdAt: -1 });
     
-    // Sign URLs for S3 files
     const signedStudents = await Promise.all(students.map(async (student) => {
       const s = student.toObject();
-      s._id = student._id?.toString(); // Ensure string ID
+      s._id = student._id?.toString();
       if (s.photo) s.photo = await getPresignedUrl(s.photo);
       if (s.document) s.document = await getPresignedUrl(s.document);
       if (s.signature) s.signature = await getPresignedUrl(s.signature);
@@ -84,39 +83,218 @@ exports.getStudents = async (req, res) => {
   }
 };
 
-// Add student (updated to handle password hashing)
+// Get student reports / analytics
+exports.getStudentReports = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const { dateFrom, dateTo, course, branch, batch, status } = req.query;
+
+    // Build filter
+    const filter = { adminId };
+    if (course) filter.course = course;
+    if (branch) filter.franchise = branch;
+    if (batch) filter.batch = batch;
+    if (status) filter.status = status;
+    if (dateFrom || dateTo) {
+      filter.admissionDate = {};
+      if (dateFrom) filter.admissionDate.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        filter.admissionDate.$lte = end;
+      }
+    }
+
+    const allStudents = await Student.find(filter).select('-password');
+
+    // New enrollments this month
+    const now = new Date();
+    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const newThisMonth = allStudents.filter(s =>
+      s.admissionDate && new Date(s.admissionDate) >= firstOfMonth
+    ).length;
+
+    // Status counts
+    const activeCount = allStudents.filter(s => s.status === 'Active').length;
+    const completedCount = allStudents.filter(s => s.status === 'Completed').length;
+    const onHoldCount = allStudents.filter(s => s.status === 'On Hold' || s.status === 'Inactive').length;
+
+    // Fee totals
+    const totalCollected = allStudents.reduce((sum, s) => sum + Number(s.feesPaid || 0), 0);
+    const totalFees = allStudents.reduce((sum, s) => sum + Number(s.totalFees || 0), 0);
+    const outstanding = totalFees - totalCollected;
+
+    // Course-wise counts
+    const courseCounts = {};
+    allStudents.forEach(s => {
+      if (s.course) {
+        courseCounts[s.course] = (courseCounts[s.course] || 0) + 1;
+      }
+    });
+
+    // Batch-wise counts
+    const batchCounts = {};
+    allStudents.forEach(s => {
+      if (s.batch) {
+        batchCounts[s.batch] = (batchCounts[s.batch] || 0) + 1;
+      }
+    });
+
+    // Branch-wise counts
+    const branchCounts = {};
+    allStudents.forEach(s => {
+      const br = s.franchise || 'Main Campus';
+      branchCounts[br] = (branchCounts[br] || 0) + 1;
+    });
+
+    // Monthly enrollment trend (last 6 months)
+    const monthlyTrend = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const start = new Date(d.getFullYear(), d.getMonth(), 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+      const count = allStudents.filter(s => {
+        const ad = new Date(s.admissionDate);
+        return ad >= start && ad <= end;
+      }).length;
+      monthlyTrend.push({
+        month: start.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
+        count
+      });
+    }
+
+    const completionRate = allStudents.length > 0 ? Math.round((completedCount / allStudents.length) * 100) : 0;
+
+    res.json({
+      summary: {
+        total: allStudents.length,
+        newThisMonth,
+        active: activeCount,
+        completed: completedCount,
+        onHold: onHoldCount,
+        totalCollected,
+        totalFees,
+        outstanding,
+        completionRate
+      },
+      courseCounts,
+      batchCounts,
+      branchCounts,
+      monthlyTrend
+    });
+  } catch (error) {
+    console.error('Error fetching student reports:', error);
+    res.status(500).json({ msg: 'Error fetching student reports', error: error.message });
+  }
+};
+
+// Generate fee schedule for a student
+exports.generateFeeSchedule = async (req, res) => {
+  try {
+    const { studentId, scheme, joiningDate, courseFee, monthlyAmount, installments, lumpSumDueDate, registrationFee } = req.body;
+    const adminId = req.user.id;
+
+    const student = await Student.findOne({ _id: studentId, adminId });
+    if (!student) return res.status(404).json({ msg: 'Student not found' });
+
+    // Delete any existing schedules for this student
+    await FeeSchedule.deleteMany({ studentId, adminId });
+
+    const schedulesToCreate = [];
+    const joining = joiningDate ? new Date(joiningDate) : new Date(student.admissionDate);
+
+    if (scheme === 'Monthly') {
+      // Auto-generate monthly entries
+      const monthlyAmt = Number(monthlyAmount) || 0;
+      const duration = Number(req.body.monthlyDuration) || 12; // Use provided duration or default to 12
+      
+      for (let i = 0; i < duration; i++) {
+        const dueDate = new Date(joining);
+        dueDate.setMonth(dueDate.getMonth() + i);
+        schedulesToCreate.push({
+          studentId,
+          adminId,
+          enrollmentId: studentId,
+          sequence: i + 1,
+          type: 'MONTHLY',
+          label: dueDate.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
+          amount: monthlyAmt,
+          dueDate,
+          status: 'DUE'
+        });
+      }
+    } else if (scheme === 'Installments') {
+      // installments is an array of { amount, dueDate }
+      const insts = Array.isArray(installments) ? installments : [];
+      insts.forEach((inst, i) => {
+        schedulesToCreate.push({
+          studentId,
+          adminId,
+          enrollmentId: studentId,
+          sequence: i + 1,
+          type: 'INSTALLMENT',
+          label: `Installment ${i + 1}/${insts.length}`,
+          amount: Number(inst.amount) || 0,
+          dueDate: new Date(inst.dueDate),
+          status: 'DUE'
+        });
+      });
+    } else if (scheme === 'Lump Sum') {
+      const dueDate = lumpSumDueDate ? new Date(lumpSumDueDate) : (() => {
+        const d = new Date(joining);
+        d.setDate(d.getDate() + 3);
+        return d;
+      })();
+      schedulesToCreate.push({
+        studentId,
+        adminId,
+        enrollmentId: studentId,
+        sequence: 1,
+        type: 'FULL',
+        label: 'Full Course Fee',
+        amount: Number(courseFee) || Number(student.totalFees) || 0,
+        dueDate,
+        status: 'DUE'
+      });
+    }
+
+    // Update student fee scheme
+    await Student.findByIdAndUpdate(studentId, {
+      feeScheme: scheme,
+      registrationFee: Number(registrationFee) || 500
+    });
+
+    let created = [];
+    if (schedulesToCreate.length > 0) {
+      created = await FeeSchedule.insertMany(schedulesToCreate);
+    }
+
+    res.json({ msg: 'Fee schedule generated successfully', count: created.length, schedules: created });
+
+    // Trigger Enrollment/Fee Plan Email
+    try {
+      if (created.length > 0) {
+        await emailService.sendEnrollmentFeeEmail(student, created);
+      }
+    } catch (emailErr) {
+      console.error('Failed to send enrollment email:', emailErr);
+    }
+  } catch (error) {
+    console.error('Error generating fee schedule:', error);
+    res.status(500).json({ msg: 'Error generating fee schedule', error: error.message });
+  }
+};
+
+// Add student (updated to handle fee scheme)
 exports.addStudent = async (req, res) => {
   try {
     const {
-      name,
-      email,
-      password,
-      phone,
-      franchise,
-      registrationNo,
-      course,
-      batch,
-      rollNumber,
-      admissionDate,
-      dob,
-      gender,
-      religion,
-      caste,
-      bloodGroup,
-      address,
-      state,
-      district,
-      city,
-      pincode,
-      referralCode,
-      username,
-      feesPaid,
-      totalFees,
-      fatherName,
-      motherName,
-      guardianPhone,
-      guardianAddress,
-      status
+      name, email, password, phone, franchise, registrationNo, course, batch,
+      rollNumber, admissionDate, dob, gender, religion, caste, bloodGroup,
+      address, state, district, city, pincode, referralCode, username,
+      feesPaid, totalFees, fatherName, motherName, guardianPhone, guardianAddress,
+      status, registrationFee, feeScheme
     } = req.body;
 
     // ✅ Quota Enforcement Check
@@ -127,10 +305,8 @@ exports.addStudent = async (req, res) => {
 
     if (settings && admin) {
         const studentCount = await Student.countDocuments({ adminId: req.user.id });
-        const plan = admin.plan?.toLowerCase() || 'basic'; // basic, premium, enterprise
-        const limitKey = plan === 'basic' ? 'basicStudentLimit' : plan === 'premium' || plan === 'professional' ? 'professionalStudentLimit' : 'enterpriseStudentLimit'; // Enterprise usually has no limit or high
-        
-        // Actually, let's use the keys from schema: basicStudentLimit, professionalStudentLimit
+        const plan = admin.plan?.toLowerCase() || 'basic';
+        const limitKey = plan === 'basic' ? 'basicStudentLimit' : plan === 'premium' || plan === 'professional' ? 'professionalStudentLimit' : 'enterpriseStudentLimit';
         const limit = settings.quotas?.[plan + 'StudentLimit'] || settings.quotas?.[limitKey] || 10000;
         
         if (studentCount >= limit) {
@@ -141,14 +317,11 @@ exports.addStudent = async (req, res) => {
         }
     }
 
-    // Validate required fields
     if (!name || !email || !phone || !course) {
       return res.status(400).json({ msg: 'Required fields are missing' });
     }
 
     const normalizedEmail = (email || '').toLowerCase().trim();
-
-    // Check if student already exists
     const existingStudent = await Student.findOne({ email: normalizedEmail });
     if (existingStudent) {
       return res.status(400).json({ msg: 'Student with this email already exists' });
@@ -158,15 +331,13 @@ exports.addStudent = async (req, res) => {
     const documentPath = req.files?.document?.[0] ? req.files.document[0].location : (req.body.documentPath || '');
     const signaturePath = req.files?.signature?.[0] ? req.files.signature[0].location : (req.body.signaturePath || '');
 
-    // Set default password if not provided
     const studentPassword = password || 'student123';
-
     const resolvedRegistrationNo = await ensureUniqueRegistrationNo(req.user.id, registrationNo);
 
     const student = new Student({
       name: name.trim(),
       email: normalizedEmail,
-      password: studentPassword, // Hashed by pre-save hook
+      password: studentPassword,
       phone,
       franchise: franchise || '',
       registrationNo: resolvedRegistrationNo,
@@ -196,14 +367,15 @@ exports.addStudent = async (req, res) => {
       status: status || 'Active',
       feesPaid: feesPaid || 0,
       totalFees: totalFees || 0,
-      isActive: status === 'Active',
+      registrationFee: Number(registrationFee) || 500,
+      feeScheme: feeScheme || '',
+      isActive: (status || 'Active') === 'Active',
       firstLogin: true,
       adminId: req.user.id
     });
 
-    await student.save(); // Password gets hashed
+    await student.save();
 
-    // Remove password from response
     const s = student.toObject();
     s._id = student._id?.toString();
     delete s.password;
@@ -235,32 +407,16 @@ exports.updateStudent = async (req, res) => {
     }
     const updateData = { ...req.body };
 
-    // Remove password from update data - use separate endpoint for password changes
     delete updateData.password;
 
-    // Handle dates properly if present
     if (updateData.admissionDate) updateData.admissionDate = new Date(updateData.admissionDate);
     if (updateData.dob) updateData.dob = new Date(updateData.dob);
 
-    if (req.files?.photo?.[0]) {
-      updateData.photo = req.files.photo[0].location;
-    }
-    if (req.files?.document?.[0]) {
-      updateData.document = req.files.document[0].location;
-    }
-    if (req.files?.signature?.[0]) {
-      updateData.signature = req.files.signature[0].location;
-    }
-
-    if (updateData.documentPath) {
-      updateData.document = updateData.documentPath;
-      delete updateData.documentPath;
-    }
-
-    if (updateData.signaturePath) {
-      updateData.signature = updateData.signaturePath;
-      delete updateData.signaturePath;
-    }
+    if (req.files?.photo?.[0]) updateData.photo = req.files.photo[0].location;
+    if (req.files?.document?.[0]) updateData.document = req.files.document[0].location;
+    if (req.files?.signature?.[0]) updateData.signature = req.files.signature[0].location;
+    if (updateData.documentPath) { updateData.document = updateData.documentPath; delete updateData.documentPath; }
+    if (updateData.signaturePath) { updateData.signature = updateData.signaturePath; delete updateData.signaturePath; }
 
     if (updateData.status) {
       updateData.isActive = updateData.status === 'Active';
@@ -295,9 +451,9 @@ exports.deleteStudent = async (req, res) => {
   try {
     const { id } = req.params;
     const student = await Student.findOneAndDelete({ _id: id, adminId: req.user.id });
-    if (!student) {
-      return res.status(404).json({ msg: 'Student not found' });
-    }
+    if (!student) return res.status(404).json({ msg: 'Student not found' });
+    // Also clean up fee schedules
+    await FeeSchedule.deleteMany({ studentId: id, adminId: req.user.id });
     res.json({ msg: 'Student deleted successfully' });
   } catch (error) {
     console.error('Error deleting student:', error);
@@ -312,11 +468,8 @@ exports.resetStudentPassword = async (req, res) => {
     const { newPassword } = req.body;
 
     const student = await Student.findOne({ _id: id, adminId: req.user.id });
-    if (!student) {
-      return res.status(404).json({ msg: 'Student not found' });
-    }
+    if (!student) return res.status(404).json({ msg: 'Student not found' });
 
-    // Set new password (will be hashed by pre-save hook)
     student.password = newPassword || 'student123';
     student.firstLogin = true;
     await student.save();
@@ -357,7 +510,6 @@ exports.bulkUploadStudents = async (req, res) => {
     const studentsToProcess = [];
     let invalidCount = 0;
     
-    // Read CSV from buffer
     const bufferStream = new stream.PassThrough();
     bufferStream.end(req.file.buffer);
 
@@ -365,7 +517,6 @@ exports.bulkUploadStudents = async (req, res) => {
       .pipe(csv())
       .on('data', (data) => {
         try {
-          // Find matching keys ignoring cases, trims, and non-printable chars (BOM etc)
           const findVal = (keyStr) => {
             const normalizedKeyStr = keyStr.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
             const key = Object.keys(data).find(k => {
@@ -383,20 +534,18 @@ exports.bulkUploadStudents = async (req, res) => {
           const username = findVal('username');
           const password = findVal('password') || 'student123';
 
-          // Required Check according to Manual Form
           if (name && email && phone && course && batch && username) {
             const admissionDateStr = findVal('admissiondate');
             const dobStr = findVal('dateofbirth') || findVal('dob');
             const fStatus = findVal('feestatus').toLowerCase();
+            const rawStatus = findVal('studentstatus') || findVal('status') || 'Active';
+            // Map legacy Inactive to On Hold
+            const mappedStatus = rawStatus === 'Inactive' ? 'On Hold' : rawStatus;
+            const validStatuses = ['Active', 'Completed', 'On Hold'];
+            const finalStatus = validStatuses.includes(mappedStatus) ? mappedStatus : 'Active';
 
             studentsToProcess.push({
-              name,
-              email,
-              phone,
-              course,
-              batch,
-              username,
-              password,
+              name, email, phone, course, batch, username, password,
               franchise: findVal('franchise'),
               registrationNo: findVal('registrationno'),
               admissionDate: admissionDateStr ? new Date(admissionDateStr) : Date.now(),
@@ -417,13 +566,13 @@ exports.bulkUploadStudents = async (req, res) => {
               motherName: findVal('mothername'),
               guardianPhone: findVal('guardianphone'),
               guardianAddress: findVal('guardianaddress'),
-              status: findVal('studentstatus') || findVal('status') || 'Active',
+              status: finalStatus,
               adminId: req.user.id,
-              isActive: (findVal('studentstatus') || findVal('status') || 'Active') === 'Active',
+              isActive: finalStatus === 'Active',
               firstLogin: true
             });
           } else {
-            console.log(`[BULK] Skipping row: Missing required fields: ${JSON.stringify({ name:!!name, email:!!email, phone:!!phone, course:!!course, batch:!!batch, username:!!username })}`);
+            console.log(`[BULK] Skipping row: Missing required fields`);
             invalidCount++;
           }
         } catch (rowErr) {
@@ -440,7 +589,6 @@ exports.bulkUploadStudents = async (req, res) => {
 
           for (const sData of studentsToProcess) {
             try {
-              // Check quota dynamically
               const currentCount = await Student.countDocuments({ adminId: req.user.id });
               if (currentCount >= quotaLimit) {
                  console.warn(`[BULK] Stopped: Quota limit (${quotaLimit}) reached mid-upload.`);
@@ -448,17 +596,11 @@ exports.bulkUploadStudents = async (req, res) => {
               }
 
               const existingStudent = await Student.findOne({ email: sData.email });
-              if (existingStudent) {
-                skipped++;
-                continue;
-              }
+              if (existingStudent) { skipped++; continue; }
 
-              // If registrationNo is provided in CSV, ensure it's unique, otherwise generate it
               if (sData.registrationNo) {
                 const clash = await Student.findOne({ adminId: req.user.id, registrationNo: sData.registrationNo });
-                if (clash) {
-                   sData.registrationNo = await ensureUniqueRegistrationNo(req.user.id, '');
-                }
+                if (clash) sData.registrationNo = await ensureUniqueRegistrationNo(req.user.id, '');
               } else {
                 sData.registrationNo = await ensureUniqueRegistrationNo(req.user.id, '');
               }
@@ -468,7 +610,7 @@ exports.bulkUploadStudents = async (req, res) => {
               added++;
             } catch (saveErr) {
               console.error(`[BULK] Failed to save student ${sData.email}:`, saveErr.message);
-              invalidCount++; // Treat individual save failures as invalid rows for the report
+              invalidCount++;
             }
           }
 
@@ -476,9 +618,7 @@ exports.bulkUploadStudents = async (req, res) => {
 
           res.status(200).json({ 
             msg: `Bulk upload complete. Added: ${added}, Skipped (Duplicates): ${skipped}, Invalid (Format/Error): ${invalidCount}`,
-            added,
-            skipped,
-            invalidCount
+            added, skipped, invalidCount
           });
         } catch (endErr) {
           console.error('[BULK] Error in final processing loop:', endErr);

@@ -11,6 +11,12 @@ const feeScheduleSchema = new mongoose.Schema({
   status: { type: String, enum: ['DUE', 'PAID', 'PARTIAL', 'OVERDUE'], default: 'DUE', index: true },
   paidAt: { type: Date },
   paymentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' },
+  remarks: [{
+    comment: String,
+    date: { type: Date, default: Date.now },
+    adminName: String
+  }],
+  remainingAmount: { type: Number, default: 0 },
   adminId: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: true, index: true }
 }, { timestamps: true });
 

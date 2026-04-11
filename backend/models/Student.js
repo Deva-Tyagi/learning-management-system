@@ -110,9 +110,10 @@ const studentSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  // Updated status enum: Active, Completed, On Hold (Inactive kept for backward compat)
   status: {
     type: String,
-    enum: ['Active', 'Inactive'],
+    enum: ['Active', 'Inactive', 'Completed', 'On Hold'],
     default: 'Active',
   },
   referralCode: {
@@ -124,17 +125,10 @@ const studentSchema = new mongoose.Schema({
     default: '',
   },
   photo: {
-    type: String,            // Store relative path or URL to their photo
+    type: String,
     default: '',
   },
-  dob: {                     // Date of Birth for ID card
-    type: Date,
-  },
-  admissionDate: {           // Date they joined
-    type: Date,
-    default: Date.now,
-  },
-  admissionYear: {           // For ID card
+  admissionYear: {
     type: Number,
   },
   feesPaid: {
@@ -149,6 +143,16 @@ const studentSchema = new mongoose.Schema({
     type: String,
     enum: ['paid', 'unpaid', 'partial'],
     default: 'unpaid',
+  },
+  // New fee scheme fields
+  registrationFee: {
+    type: Number,
+    default: 500,
+  },
+  feeScheme: {
+    type: String,
+    enum: ['Monthly', 'Installments', 'Lump Sum', ''],
+    default: '',
   },
   isActive: {
     type: Boolean,
@@ -193,6 +197,8 @@ studentSchema.pre('save', function (next) {
   } else {
     this.feeStatus = 'unpaid';
   }
+  // Keep isActive in sync with status
+  this.isActive = this.status === 'Active';
   next();
 });
 

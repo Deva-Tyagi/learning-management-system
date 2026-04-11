@@ -67,7 +67,10 @@ app.use(maintenanceMiddleware);
 
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/courses', require('./routes/courseRoutes'));
+app.use('/api/subjects', require('./routes/subjectRoutes'));
+app.use('/api/study-materials', require('./routes/studyMaterialRoutes'));
 app.use('/api/students', require('./routes/studentRoutes'));
+app.use('/api/staff', require('./routes/staffRoutes'));
 app.use('/api/notes', require('./routes/noteRoutes'));
 app.use('/api/attendance', require('./routes/attendanceRoutes'));
 app.use('/api/fee', require('./routes/feeRoutes'));
@@ -80,6 +83,7 @@ app.use('/api/id-cards', require('./routes/idCardRoutes'));
 app.use('/api/enrollments', require('./routes/enrollmentRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/reminders', require('./routes/reminderRoutes'));
+app.use('/api/checklist', require('./routes/checklistRoutes')); // NEW
 app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/fees/schedule', require('./routes/feesScheduleRoutes'));
 app.use('/api/franchises', require('./routes/franchiseRoutes'));

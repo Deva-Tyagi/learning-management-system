@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');
 const {
   getStudents,
   addStudent,
@@ -10,13 +9,15 @@ const {
   resetStudentPassword,
   loginStudent,
   previewRegistrationNumber,
-  bulkUploadStudents
+  bulkUploadStudents,
+  getStudentReports,
+  generateFeeSchedule,
 } = require('../controllers/studentController');
 const auth = require('../middleware/authMiddleware');
 const logActivity = require('../middleware/activityLogger');
 const Student = require('../models/Student');
 
-const { uploadImage, uploadDocument } = require('../config/s3');
+const { uploadImage } = require('../config/s3');
 
 // ------------------ Routes for Students -----------------------
 
@@ -26,28 +27,34 @@ router.post('/login', loginStudent);
 // All routes below require authentication
 router.get('/get', auth, getStudents);
 router.get('/preview-registration', auth, previewRegistrationNumber);
+router.get('/reports', auth, getStudentReports);
+
 router.post('/add', auth, uploadImage.fields([
   { name: 'photo', maxCount: 1 },
   { name: 'document', maxCount: 1 },
   { name: 'signature', maxCount: 1 },
 ]), addStudent);
+
 router.put('/update/:id', auth, uploadImage.fields([
   { name: 'photo', maxCount: 1 },
   { name: 'document', maxCount: 1 },
   { name: 'signature', maxCount: 1 },
 ]), updateStudent);
+
 router.delete('/delete/:id', auth, deleteStudent);
 router.put('/reset-password/:id', auth, resetStudentPassword);
+
+// Fee schedule generation route
+router.post('/generate-fee-schedule', auth, generateFeeSchedule);
 
 const uploadMemory = multer({ storage: multer.memoryStorage() });
 router.post('/bulk-upload', auth, uploadMemory.single('file'), bulkUploadStudents);
 
-// ----------- NEW: Student Photo Upload/Update Route -----------
+// Student Photo Upload/Update Route
 router.post('/photo/:id', auth, uploadImage.single('photo'), async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     if (!student) return res.status(404).json({ msg: 'Student not found' });
-    // Use .location for S3, fallback to .path for compatibility
     student.photo = req.file.location || req.file.path;
     await student.save();
     res.json({ msg: 'Photo updated', photo: student.photo });

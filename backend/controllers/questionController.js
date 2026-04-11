@@ -4,7 +4,7 @@ const QuestionGroup = require('../models/QuestionGroup');
 // Add a single question
 exports.addQuestion = async (req, res) => {
   try {
-    const { type, question, options, correctAnswer, marks, groupId, course } = req.body;
+    const { type, question, options, correctAnswer, marks, groupId, course, subject } = req.body;
     
     if (!type || !question || !course) {
       return res.status(400).json({ msg: 'Required fields missing' });
@@ -18,6 +18,7 @@ exports.addQuestion = async (req, res) => {
       marks,
       groupId,
       course,
+      subject,
       createdBy: req.user.id
     });
 
@@ -32,7 +33,7 @@ exports.addQuestion = async (req, res) => {
 // Bulk add questions
 exports.bulkAddQuestions = async (req, res) => {
   try {
-    const { questions, groupId, course } = req.body; // questions is an array
+    const { questions, groupId, course, subject: bulkSubject } = req.body; // questions is an array
     
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
       return res.status(400).json({ msg: 'No questions provided' });
@@ -40,8 +41,9 @@ exports.bulkAddQuestions = async (req, res) => {
 
     const questionsWithMeta = questions.map(q => ({
       ...q,
-      groupId,
-      course,
+      groupId: q.groupId || groupId,
+      course: q.course || course,
+      subject: q.subject || bulkSubject,
       createdBy: req.user.id
     }));
 
@@ -56,11 +58,13 @@ exports.bulkAddQuestions = async (req, res) => {
 // Get questions (with filters and pagination)
 exports.getQuestions = async (req, res) => {
   try {
-    const { groupId, course, type, page = 1, limit = 10 } = req.query;
+    const { groupId, course, subject, type, page = 1, limit = 10, search } = req.query;
     let query = { createdBy: req.user.id };
     if (groupId) query.groupId = groupId;
     if (course) query.course = course;
+    if (subject) query.subject = subject;
     if (type) query.type = type;
+    if (search) query.question = { $regex: search, $options: 'i' };
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     

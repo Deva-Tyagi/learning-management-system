@@ -1,37 +1,67 @@
 const Fee = require('../models/Fee');
 const Student = require('../models/Student');
+const FeeSchedule = require('../models/FeeSchedule');
+const Payment = require('../models/Payment');
 
 exports.addFee = async (req, res) => {
   try {
-    const { studentId, course, amount, date } = req.body;
+    const { studentId, amount, date, scheduleId, remarks, mode, transactionId, discount } = req.body;
+    const adminId = req.user.id;
 
-    // Overpay Protection
+    // 1. Basic Validation
     const student = await Student.findById(studentId);
     if (!student) return res.status(404).json({ error: 'Student not found' });
-    const balance = (student.totalFees || 0) - (student.feesPaid || 0);
-    if (balance <= 0) return res.status(400).json({ error: 'Student has already paid full fees.' });
-    if (Number(amount) > balance) {
-      return res.status(400).json({ error: `Only ₹${balance} balance remains. Cannot accept ₹${amount}.` });
+
+    // 2. Installment Logic (Section 5.3)
+    let installmentLabel = "Lump Sum";
+    if (scheduleId) {
+      const schedule = await FeeSchedule.findOne({ _id: scheduleId, adminId });
+      if (!schedule) return res.status(404).json({ error: 'Installment record not found' });
+      
+      const currentAmt = Number(amount);
+      const remaining = (schedule.remainingAmount !== undefined ? schedule.remainingAmount : schedule.amount) - currentAmt;
+      
+      schedule.remainingAmount = Math.max(0, remaining);
+      schedule.status = schedule.remainingAmount <= 0 ? 'PAID' : 'PARTIAL';
+      schedule.paidAt = new Date(date);
+      if (remarks) {
+        schedule.remarks.push({ comment: remarks, date: new Date(), adminName: req.user.name || 'Admin' });
+      }
+      await schedule.save();
+      installmentLabel = schedule.label;
     }
 
+    // 3. Create Payment Record (New Engine)
+    const newPayment = new Payment({
+      studentId,
+      enrollmentId: null, // To be linked if available
+      scheduleId,
+      amount: Number(amount),
+      mode: mode || 'CASH',
+      transactionId,
+      discount: Number(discount || 0),
+      paidOn: date,
+      notes: remarks,
+      adminId
+    });
+    await newPayment.save();
+
+    // 4. Legacy Support (Sync with Fee/Student models)
     const newFee = new Fee({
       studentId,
-      course,
       amount: Number(amount),
       date,
-      adminId: req.user.id
+      adminId
     });
-
     await newFee.save();
 
-    // Status Synchronization
     student.feesPaid = (student.feesPaid || 0) + Number(amount);
     await student.save();
 
-    res.status(201).json({ message: 'Fee added successfully', fee: newFee });
+    res.status(201).json({ message: 'Payment recorded against ' + installmentLabel, payment: newPayment });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to add fee' });
+    res.status(500).json({ error: 'Failed to record payment' });
   }
 };
 

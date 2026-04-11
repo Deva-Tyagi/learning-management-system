@@ -1,32 +1,27 @@
 const mongoose = require('mongoose');
 
 const batchSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Batch name is required'],
-    trim: true
-  },
-  startTime: {
-    type: String, // e.g., "08:00 AM"
-    required: [true, 'Start time is required']
-  },
-  endTime: {
-    type: String, // e.g., "09:00 AM"
-    required: [true, 'End time is required']
-  },
-  days: [{
-    type: String, // e.g., ["Monday", "Tuesday", ...]
+  name: { type: String, required: true, trim: true }, // e.g. "React - 9am"
+  course: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
+  inCharge: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', required: false }, // Teacher
+  
+  startTime: { type: String, required: true },
+  endTime: { type: String, required: true },
+  
+  scheduleDays: [{ 
+    type: String, 
     enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
   }],
-  adminId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Admin',
-    required: true
+  
+  capacity: { type: Number, default: 50 },
+  
+  status: { 
+    type: String, 
+    enum: ['Active', 'Completed', 'Inactive'], 
+    default: 'Active' 
   },
-  isActive: {
-    type: Boolean,
-    default: true
-  }
+  
+  adminId: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: true }
 }, { timestamps: true });
 
 // Ensure unique batch names per admin

@@ -30,6 +30,29 @@ const RankBadge = ({ rank }) => {
   return <div style={{ ...base, background: "#f8fafc", border: "1px solid #f1f5f9", color: "#94a3b8", fontSize: 12, fontWeight: 900 }}>{rank}</div>;
 };
 
+/* ─── Avatar ─── */
+const Avatar = ({ student, size = 36, radius = 9, border = "2px solid #e2e8f0" }) => {
+  const fallback = (n) => `https://ui-avatars.com/api/?name=${encodeURIComponent(n || "U")}&background=random&color=fff&size=80`;
+  const [src, setSrc] = useState(null);
+
+  useEffect(() => {
+    if (student?.photo) {
+      setSrc(student.photo.startsWith("http") ? student.photo : `${IMAGE_BASE_URL}${student.photo}`);
+    } else {
+      setSrc(fallback(student?.name));
+    }
+  }, [student?.photo, student?.name]);
+
+  return (
+    <img 
+      src={src || fallback(student?.name)} 
+      alt={student?.name || "User"} 
+      onError={() => setSrc(fallback(student?.name))}
+      style={{ width: size, height: size, borderRadius: radius, objectFit: "cover", border, flexShrink: 0, display: "block" }} 
+    />
+  );
+};
+
 export default function Leaderboard() {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -178,10 +201,11 @@ export default function Leaderboard() {
 
               {/* Avatar + badge */}
               <div style={{ position: "relative", marginBottom: isMobile ? 0 : 14, flexShrink: 0 }}>
-                <img
-                  src={student.photo ? (student.photo.startsWith('http') ? student.photo : `${IMAGE_BASE_URL}${student.photo}`) : `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&background=random&color=fff`}
-                  style={{ width: isMobile ? 52 : 88, height: isMobile ? 52 : 88, borderRadius: isMobile ? 12 : 20, objectFit: "cover", border: "4px solid #fff", boxShadow: "0 6px 18px rgba(0,0,0,0.1)", display: "block" }}
-                  alt=""
+                <Avatar 
+                  student={student} 
+                  size={isMobile ? 52 : 88} 
+                  radius={isMobile ? 12 : 20} 
+                  border="4px solid #fff" 
                 />
                 <div style={{ position: "absolute", bottom: -4, right: -4 }}>
                   <RankBadge rank={i + 1} />
@@ -222,11 +246,7 @@ export default function Leaderboard() {
             ) : filteredStudents.map((student, idx) => (
               <div key={student._id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: "1px solid #f8fafc" }}>
                 <RankBadge rank={idx + 1} />
-                <img
-                  src={student.photo ? (student.photo.startsWith('http') ? student.photo : `${IMAGE_BASE_URL}${student.photo}`) : `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&background=random&color=fff`}
-                  style={{ width: 36, height: 36, borderRadius: 10, objectFit: "cover", border: "1px solid #e2e8f0", flexShrink: 0 }}
-                  alt=""
-                />
+                <Avatar student={student} size={36} radius={10} border="1px solid #e2e8f0" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{student.name}</p>
                   <p style={{ margin: "2px 0 0", fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>ID: {student.rollNumber || "NO-ID"}</p>

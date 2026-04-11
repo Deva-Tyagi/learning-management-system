@@ -1,285 +1,171 @@
 const Exam = require('../models/Exam');
 const Student = require('../models/Student');
+const Question = require('../models/Question');
 
 // Create new exam
 exports.createExam = async (req, res) => {
   try {
     const {
-      title,
-      description,
-      course,
-      batch,
-      examDate,
-      startTime,
-      endTime,
-      duration,
-      totalMarks,
-      passingMarks,
-      questions,
-      instructions,
-      allowLateSubmission,
-      showResultsImmediately,
-      randomizeQuestions,
-      assignedStudents
+      title, description, course, batch, targetType, assignedStudents,
+      examDate, startTime, endTime, duration, totalMarks, passingPercentage,
+      totalExamMarks, questionGroupId, instructions, allowLateSubmission,
+      showResultsImmediately, randomizeQuestions, automaticSerialization,
+      questions: bodyQuestions, manualQuestions
     } = req.body;
 
-    // Validate required fields
-    if (!title || !course || !examDate || !startTime || !endTime || !duration) {
+    const sourceQuestions = bodyQuestions || manualQuestions || [];
+    const targetMarks = totalExamMarks || totalMarks;
+
+    if (!title || !course || !examDate || !startTime || !endTime || !duration || !targetMarks) {
       return res.status(400).json({ msg: 'All required fields must be filled' });
     }
 
-    if (!batch && (!assignedStudents || assignedStudents.length === 0)) {
-      return res.status(400).json({ msg: 'Please provide either a batch or specific students' });
+    let finalAssignedStudents = [];
+    if (batch && (!assignedStudents || assignedStudents.length === 0)) {
+      const studentsInBatch = await Student.find({ batch, isActive: true, adminId: req.user.id }).select('_id');
+      finalAssignedStudents = studentsInBatch.map(s => s._id);
+    } else {
+      finalAssignedStudents = assignedStudents || [];
     }
 
-    if (!questions || questions.length === 0) {
-      return res.status(400).json({ msg: 'At least one question is required' });
-    }
+    let finalQuestions = [];
+    let calculatedTotalMarks = 0;
 
-    // Validate questions
-    for (let i = 0; i < questions.length; i++) {
-      const question = questions[i];
-      if (!question.question || !question.marks) {
-        return res.status(400).json({ msg: `Question ${i + 1} is incomplete` });
-      }
+    if (questionGroupId && sourceQuestions.length === 0) {
+      // Auto-fetch from group if not provided
+      const questionsInGroup = await Question.find({ groupId: questionGroupId, adminId: req.user.id });
+      if (questionsInGroup.length === 0) return res.status(400).json({ msg: 'No questions in group' });
       
-      if (question.type === 'mcq') {
-        if (!question.options || question.options.length < 2) {
-          return res.status(400).json({ msg: `Question ${i + 1} must have at least 2 options` });
-        }
-        if (!question.correctAnswer && question.correctAnswer !== '0') {
-          return res.status(400).json({ msg: `Question ${i + 1} must have a correct answer selected` });
-        }
+      const shuffled = questionsInGroup.sort(() => 0.5 - Math.random());
+      for (const q of shuffled) {
+        if (calculatedTotalMarks < targetMarks) {
+          finalQuestions.push({
+            type: q.type, question: q.question, options: q.options,
+            correctAnswer: q.correctAnswer, marks: q.marks, order: finalQuestions.length + 1
+          });
+          calculatedTotalMarks += q.marks;
+        } else break;
       }
-    }
-
-    // Check for overlapping exams
-    const existingExam = await Exam.findOne({
-      course,
-      batch,
-      examDate: new Date(examDate),
-      isActive: true,
-      adminId: req.user.id,
-      $or: [
-        {
-          startTime: { $lte: startTime },
-          endTime: { $gte: startTime }
-        },
-        {
-          startTime: { $lte: endTime },
-          endTime: { $gte: endTime }
+    } else if (sourceQuestions.length > 0) {
+      // Logic for picking from provided pool to match totalExamMarks
+      if (totalExamMarks > 0) {
+        const shuffled = [...sourceQuestions].sort(() => 0.5 - Math.random());
+        for (const q of shuffled) {
+          if (calculatedTotalMarks < totalExamMarks) {
+            finalQuestions.push({ ...q, order: finalQuestions.length + 1 });
+            calculatedTotalMarks += q.marks;
+          } else break;
         }
-      ]
-    });
-
-    if (existingExam) {
-      return res.status(400).json({ 
-        msg: 'Another exam is already scheduled for this batch at the same time' 
-      });
+      } else {
+        finalQuestions = sourceQuestions.map((q, index) => ({ ...q, order: index + 1 }));
+        calculatedTotalMarks = finalQuestions.reduce((sum, q) => sum + q.marks, 0);
+      }
+    } else {
+      return res.status(400).json({ msg: 'Select question source' });
     }
+
+    const threshold = passingPercentage || 40;
+    const passingMarks = Math.ceil((calculatedTotalMarks * threshold) / 100);
 
     const exam = new Exam({
-      title,
-      description,
-      course,
-      batch,
-      examDate: new Date(examDate),
-      startTime,
-      endTime,
-      duration,
-      totalMarks,
+      title, description, course, batch,
+      assignedStudents: finalAssignedStudents,
+      examDate: new Date(examDate), startTime, endTime, duration,
+      totalMarks: calculatedTotalMarks,
       passingMarks,
-      questions: questions.map((q, index) => ({
-        ...q,
-        order: index + 1
-      })),
       instructions: instructions || [],
       allowLateSubmission: allowLateSubmission || false,
       showResultsImmediately: showResultsImmediately || false,
       randomizeQuestions: randomizeQuestions || false,
-      assignedStudents: assignedStudents || [],
+      automaticSerialization: automaticSerialization !== undefined ? automaticSerialization : true,
       createdBy: req.user.id,
       adminId: req.user.id
     });
 
     await exam.save();
 
-    res.status(201).json({
-      msg: 'Exam created successfully',
-      exam: {
-        _id: exam._id,
-        title: exam.title,
-        course: exam.course,
-        batch: exam.batch,
-        examDate: exam.examDate,
-        totalMarks: exam.totalMarks
+    // Auto-generate Admit Cards
+    try {
+      const AdmitCard = require('../models/AdmitCard');
+      if (finalAssignedStudents.length > 0) {
+        const admitCards = finalAssignedStudents.map(studentId => ({
+          studentId, 
+          examId: exam._id, 
+          course, 
+          adminId: req.user.id, 
+          generatedBy: req.user.id,
+          serialNumber: `ADC-${Math.random().toString(36).substr(2, 9).toUpperCase()}-${Date.now().toString().slice(-4)}`
+        }));
+        await AdmitCard.insertMany(admitCards);
       }
-    });
+    } catch (admitErr) { console.error('Admit card generation failed:', admitErr); }
+
+    res.status(201).json({ msg: 'Exam scheduled and Admit Cards generated', examId: exam._id });
   } catch (error) {
-    console.error('Error creating exam:', error);
-    res.status(500).json({ 
-      msg: 'Error creating exam', 
-      error: error.message 
-    });
+    res.status(500).json({ msg: 'Error creating exam', error: error.message });
   }
 };
 
 // Get all exams
 exports.getExams = async (req, res) => {
   try {
-    const { course, batch, isActive } = req.query;
-    
-    let query = {};
-    
+    const { course, batch } = req.query;
+    let query = { adminId: req.user.id };
     if (course) query.course = course;
     if (batch) query.batch = batch;
-    if (isActive !== undefined) query.isActive = isActive === 'true';
-    query.adminId = req.user.id; // Enforce isolation
-
-    const exams = await Exam.find(query)
-      .sort({ examDate: -1, createdAt: -1 })
-      .select('title description course batch examDate startTime endTime duration totalMarks passingMarks isActive createdAt');
-
-    res.json(exams);
-  } catch (error) {
-    console.error('Error fetching exams:', error);
-    res.status(500).json({ 
-      msg: 'Error fetching exams', 
-      error: error.message 
+    const exams = await Exam.find(query).sort({ examDate: -1 });
+    const now = new Date();
+    const filteredExams = exams.map(exam => {
+      const examStart = new Date(exam.examDate);
+      return { ...exam.toObject(), status: examStart < now ? 'Completed' : 'Upcoming' };
     });
-  }
+    res.json(filteredExams);
+  } catch (error) { res.status(500).json({ msg: 'Error' }); }
 };
 
 // Get exam by ID
 exports.getExamById = async (req, res) => {
   try {
-    const { id } = req.params;
-    const exam = await Exam.findOne({ _id: id, adminId: req.user.id });
-    
-    if (!exam) {
-      return res.status(404).json({ msg: 'Exam not found' });
-    }
-
+    const exam = await Exam.findOne({ _id: req.params.id, adminId: req.user.id });
+    if (!exam) return res.status(404).json({ msg: 'Not found' });
     res.json(exam);
-  } catch (error) {
-    console.error('Error fetching exam:', error);
-    res.status(500).json({ 
-      msg: 'Error fetching exam', 
-      error: error.message 
-    });
-  }
+  } catch (error) { res.status(500).json({ msg: 'Error' }); }
 };
 
 // Get exams by batch and course
 exports.getExamsByBatch = async (req, res) => {
   try {
     const { batch, course } = req.params;
-    const { isActive = true } = req.query;
-
-    const exams = await Exam.find({
-      batch,
-      course,
-      isActive,
-      adminId: req.user.id
-    }).sort({ examDate: -1 });
-
+    const exams = await Exam.find({ batch, course, adminId: req.user.id }).sort({ examDate: -1 });
     res.json(exams);
-  } catch (error) {
-    console.error('Error fetching exams by batch:', error);
-    res.status(500).json({ 
-      msg: 'Error fetching exams', 
-      error: error.message 
-    });
-  }
+  } catch (error) { res.status(500).json({ msg: 'Error' }); }
 };
 
-// Update exam
+// Update/Delete (standard)
 exports.updateExam = async (req, res) => {
   try {
-    const { id } = req.params;
-    const updateData = req.body;
-
-    // Validate questions if provided
-    if (updateData.questions) {
-      for (let i = 0; i < updateData.questions.length; i++) {
-        const question = updateData.questions[i];
-        if (!question.question || !question.marks) {
-          return res.status(400).json({ msg: `Question ${i + 1} is incomplete` });
-        }
-      }
-    }
-
     const exam = await Exam.findOneAndUpdate(
-      { _id: id, adminId: req.user.id },
-      updateData,
-      { new: true, runValidators: true }
+      { _id: req.params.id, adminId: req.user.id },
+      req.body, { new: true }
     );
-
-    if (!exam) {
-      return res.status(404).json({ msg: 'Exam not found' });
-    }
-
-    res.json({
-      msg: 'Exam updated successfully',
-      exam
-    });
-  } catch (error) {
-    console.error('Error updating exam:', error);
-    res.status(500).json({ 
-      msg: 'Error updating exam', 
-      error: error.message 
-    });
-  }
+    res.json({ msg: 'Exam updated', exam });
+  } catch (error) { res.status(500).json({ msg: 'Error' }); }
 };
 
-// Delete exam
 exports.deleteExam = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const exam = await Exam.findOneAndDelete({ _id: id, adminId: req.user.id });
-
-    if (!exam) {
-      return res.status(404).json({ msg: 'Exam not found' });
-    }
-
-    res.json({ msg: 'Exam deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting exam:', error);
-    res.status(500).json({ 
-      msg: 'Error deleting exam', 
-      error: error.message 
-    });
-  }
+    await Exam.findOneAndDelete({ _id: req.params.id, adminId: req.user.id });
+    res.json({ msg: 'Exam deleted' });
+  } catch (error) { res.status(500).json({ msg: 'Error' }); }
 };
 
-// Activate/Deactivate exam
+// Toggle status
 exports.activateDeactivateExam = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const exam = await Exam.findOne({ _id: id, adminId: req.user.id });
-
-    if (!exam) {
-      return res.status(404).json({ msg: 'Exam not found' });
-    }
-
+    const exam = await Exam.findOne({ _id: req.params.id, adminId: req.user.id });
+    if (!exam) return res.status(404).json({ msg: 'Not found' });
     exam.isActive = !exam.isActive;
     await exam.save();
-
-    res.json({
-      msg: `Exam ${exam.isActive ? 'activated' : 'deactivated'} successfully`,
-      exam: {
-        _id: exam._id,
-        title: exam.title,
-        isActive: exam.isActive
-      }
-    });
-  } catch (error) {
-    console.error('Error toggling exam status:', error);
-    res.status(500).json({ 
-      msg: 'Error updating exam status', 
-      error: error.message 
-    });
-  }
+    res.json({ msg: `Exam ${exam.isActive ? 'activated' : 'deactivated'}`, exam });
+  } catch (error) { res.status(500).json({ msg: 'Error' }); }
 };

@@ -165,7 +165,18 @@ exports.getLeaderboard = async (req, res) => {
       }
     ]);
 
-    res.json(leaderboard);
+    // Import getPresignedUrl locally if not at top of file, or use if already required.
+    // wait, we need to make sure getPresignedUrl is available
+    const { getPresignedUrl } = require('../config/s3');
+    
+    const signedLeaderboard = await Promise.all(leaderboard.map(async (student) => {
+      if (student.photo) {
+        student.photo = await getPresignedUrl(student.photo);
+      }
+      return student;
+    }));
+
+    res.json(signedLeaderboard);
   } catch (err) {
     console.error(err);
     res.status(500).send('Server Error');

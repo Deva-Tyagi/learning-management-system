@@ -55,6 +55,14 @@ const adminSchema = new mongoose.Schema({
   },
   otpExpires: {
     type: Date,
+  },
+  settings: {
+    registrationFee: { type: Number, default: 500 },
+    feeTemplates: [{
+      name: String,
+      scheme: { type: String, enum: ['MONTHLY', 'INSTALLMENT', 'LUMP_SUM'] },
+      amount: Number
+    }]
   }
 }, { timestamps: true });
 
